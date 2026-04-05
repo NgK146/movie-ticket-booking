@@ -45,15 +45,18 @@ export function renderLogin(
   
   document.getElementById('login-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    // const email = (document.getElementById('email') as HTMLInputElement).value;
-    // const password = (document.getElementById('password') as HTMLInputElement).value;
-
+    const email = (document.getElementById('email') as HTMLInputElement).value;
+    
     try {
-      // Mocking token storage for now
+      // Mocking token and role storage
       localStorage.setItem('accessToken', 'mock_access_token');
       localStorage.setItem('refreshToken', 'mock_refresh_token');
       
-      alert('Login successful! Tokens stored.');
+      // DECENTRALIZATION: Simple rule - domain @admin.com becomes Admin
+      const role = email.toLowerCase().endsWith('@admin.com') ? 'admin' : 'user';
+      localStorage.setItem('userRole', role);
+
+      alert(`Login as ${role.toUpperCase()} successful! Tokens stored.`);
       onLogin();
     } catch (err) {
       alert('Login failed: ' + (err as Error).message);
