@@ -844,7 +844,7 @@ window.handleTrailer = (movieId: number) => {
 }
 
 // Wishlist handler
-window.handleWishlist = (movieId: number, btn: HTMLElement) => {
+window.handleWishlist = (_movieId: number, btn: HTMLElement) => {
   const isLiked = btn.classList.toggle('liked')
   btn.style.background = isLiked ? 'rgba(255, 61, 90, 0.15)' : ''
   btn.style.borderColor = isLiked ? 'rgba(255, 61, 90, 0.5)' : ''
@@ -966,4 +966,479 @@ document.querySelectorAll('.interest-bar').forEach(bar => {
   interestObserver.observe(bar)
 })
 
-console.log('🎬 CineBooking loaded successfully!')
+// =========================================
+// SEAT SELECTION MODAL
+// =========================================
+
+interface SeatState {
+  movieId: number
+  selectedSeats: string[]
+  selectedDate: string
+  selectedTime: string
+  currentStep: 1 | 2
+}
+
+const seatState: SeatState = {
+  movieId: 0,
+  selectedSeats: [],
+  selectedDate: '',
+  selectedTime: '',
+  currentStep: 1,
+}
+
+// Seat prices
+const SEAT_PRICES: Record<string, number> = {
+  normal:   75000,
+  vip:      110000,
+  sweetbox: 200000,  // per couple seat (2 people)
+}
+
+// Generate seat layout: 8 rows (A-H), 12 cols, with some taken seats
+function generateSeatMap(): { row: string; col: number; type: 'normal' | 'vip' | 'sweetbox'; taken: boolean }[][] {
+  const rows = ['A','B','C','D','E','F','G','H']
+  // VIP rows are E, F. Sweetbox is row H (6 couple seats)
+  const takenSeeds = [
+    'A3','A4','B7','B8','C2','C9','D5','D6','E1','E10',
+    'F3','F4','F9','G2','G7','G8','H1','H3','H5',
+  ]
+  return rows.map(row => {
+    if (row === 'H') {
+      // Sweetbox row: 6 couple seats
+      return Array.from({ length: 6 }, (_, i) => ({
+        row, col: i + 1,
+        type: 'sweetbox' as const,
+        taken: takenSeeds.includes(`${row}${i + 1}`)
+      }))
+    }
+    return Array.from({ length: 12 }, (_, i) => {
+      const col = i + 1
+      const type: 'normal' | 'vip' = (row === 'E' || row === 'F') ? 'vip' : 'normal'
+      return { row, col, type, taken: takenSeeds.includes(`${row}${col}`) }
+    })
+  })
+}
+
+function getSeatId(row: string, col: number): string {
+  return `${row}${col}`
+}
+
+function getSeatPrice(type: 'normal' | 'vip' | 'sweetbox'): number {
+  return SEAT_PRICES[type]
+}
+
+function renderSeatMapHTML(): string {
+  const map = generateSeatMap()
+  return map.map(rowSeats => {
+    const rowLabel = rowSeats[0].row
+    const isSweetbox = rowSeats[0].type === 'sweetbox'
+
+    const seatsHTML = isSweetbox
+      ? rowSeats.map(s => {
+          const id = getSeatId(s.row, s.col)
+          const takenClass = s.taken ? 'taken' : ''
+          return `<button class="seat sweetbox ${takenClass}" data-seat="${id}" data-type="sweetbox" ${s.taken ? 'disabled' : ''} aria-label="Ghế đôi ${id}${s.taken ? ' (đã đặt)' : ''}"></button>`
+        }).join('<div class="sm-aisle"></div>')
+      : [
+          ...rowSeats.slice(0, 3),
+          null, // aisle
+          ...rowSeats.slice(3, 9),
+          null, // aisle
+          ...rowSeats.slice(9),
+        ].map(s => {
+          if (!s) return '<div class="sm-aisle"></div>'
+          const id = getSeatId(s.row, s.col)
+          const takenClass = s.taken ? 'taken' : ''
+          const t = s.type
+          return `<button class="seat ${t} ${takenClass}" data-seat="${id}" data-type="${t}" ${s.taken ? 'disabled' : ''} aria-label="Ghế ${id}${s.taken ? ' (đã đặt)' : ''}"></button>`
+        }).join('')
+
+    return `<div class="sm-row">
+      <span class="sm-row-label">${rowLabel}</span>
+      ${seatsHTML}
+    </div>`
+  }).join('')
+}
+
+// Build dates (today + 6 days)
+function buildDates(): { day: string; num: string; month: string; full: string }[] {
+  const days = ['CN','T2','T3','T4','T5','T6','T7']
+  const months = ['Th1','Th2','Th3','Th4','Th5','Th6','Th7','Th8','Th9','Th10','Th11','Th12']
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date()
+    d.setDate(d.getDate() + i)
+    return {
+      day: i === 0 ? 'Hôm nay' : days[d.getDay()],
+      num: String(d.getDate()).padStart(2, '0'),
+      month: months[d.getMonth()],
+      full: d.toLocaleDateString('vi-VN'),
+    }
+  })
+}
+
+const showtimes = [
+  { time: '10:00', type: '2D', label: '' },
+  { time: '12:30', type: '2D', label: '' },
+  { time: '14:45', type: '3D', label: '' },
+  { time: '17:15', type: '2D', label: '' },
+  { time: '19:30', type: '4DX', label: '' },
+  { time: '21:45', type: '3D', label: '' },
+]
+
+function renderSeatModal(movie: Movie): string {
+  const dates = buildDates()
+  seatState.selectedDate = dates[0].full
+  seatState.selectedTime = showtimes[0].time
+
+  const datesHTML = dates.map((d, i) => `
+    <button class="sm-date-btn ${i === 0 ? 'active' : ''}" data-date="${d.full}">
+      <span class="sm-date-day">${d.day}</span>
+      <span class="sm-date-num">${d.num}</span>
+      <span class="sm-date-month">${d.month}</span>
+    </button>
+  `).join('')
+
+  const timesHTML = showtimes.map((s, i) => `
+    <button class="sm-time-btn ${i === 0 ? 'active' : ''}" data-time="${s.time}">
+      ${s.time}
+      <span class="time-type">${s.type}</span>
+    </button>
+  `).join('')
+
+  return `
+    <div class="seat-modal-backdrop" id="seat-modal-backdrop" role="dialog" aria-modal="true" aria-label="Chọn ghế xem phim">
+      <div class="seat-modal" id="seat-modal">
+
+        <!-- Header -->
+        <div class="sm-header">
+          <img class="sm-movie-thumb" src="${movie.poster}" alt="${movie.title}"
+            onerror="this.src='https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=200&h=300&fit=crop&q=80'"/>
+          <div class="sm-movie-info">
+            <div class="sm-movie-title">${movie.title}</div>
+            <div class="sm-movie-meta">
+              <span>⏱ ${movie.duration}</span>
+              <span>🔞 ${movie.ageRating}</span>
+              <span>🎬 ${movie.language}</span>
+              <span>📍 CGV Vincom</span>
+            </div>
+          </div>
+          <button class="sm-close" id="sm-close-btn" aria-label="Đóng">✕</button>
+        </div>
+
+        <!-- Steps -->
+        <div class="sm-steps" aria-label="Các bước đặt vé">
+          <div class="sm-step active" id="step-1">
+            <div class="sm-step-num">1</div>
+            <span class="sm-step-text">Chọn lịch chiếu</span>
+          </div>
+          <div class="sm-step-line"></div>
+          <div class="sm-step" id="step-2">
+            <div class="sm-step-num">2</div>
+            <span class="sm-step-text">Chọn ghế</span>
+          </div>
+          <div class="sm-step-line"></div>
+          <div class="sm-step" id="step-3">
+            <div class="sm-step-num">3</div>
+            <span class="sm-step-text">Xác nhận</span>
+          </div>
+        </div>
+
+        <!-- Main content (steps 1 & 2) -->
+        <div class="sm-main-content" id="sm-main-content">
+          <div class="sm-body">
+
+            <!-- Step 1: Date & Time -->
+            <div id="sm-step1-panel">
+              <p class="sm-section-label">Chọn ngày</p>
+              <div class="sm-dates" id="sm-dates">${datesHTML}</div>
+
+              <p class="sm-section-label">Suất chiếu</p>
+              <div class="sm-times" id="sm-times">${timesHTML}</div>
+            </div>
+
+            <!-- Step 2: Seat map -->
+            <div id="sm-step2-panel" style="display:none">
+              <div class="sm-screen-wrap">
+                <div class="sm-screen"></div>
+                <div class="sm-screen-label">Màn hình</div>
+              </div>
+
+              <div class="sm-seat-map" id="sm-seat-map" role="group" aria-label="Sơ đồ ghế ngồi">
+                ${renderSeatMapHTML()}
+              </div>
+
+              <div class="sm-legend">
+                <div class="legend-item"><div class="legend-box normal"></div> Thường (75k)</div>
+                <div class="legend-item"><div class="legend-box vip"></div> VIP (110k)</div>
+                <div class="legend-item"><div class="legend-box sweetbox"></div> Sweetbox (200k)</div>
+                <div class="legend-item"><div class="legend-box selected"></div> Đã chọn</div>
+                <div class="legend-item"><div class="legend-box taken"></div> Đã đặt</div>
+              </div>
+
+              <div class="sm-summary" id="sm-summary">
+                <div class="sm-summary-row">
+                  <span>Phim</span>
+                  <span class="val-red">${movie.title}</span>
+                </div>
+                <div class="sm-summary-row">
+                  <span>Lịch chiếu</span>
+                  <span id="sm-summary-time">—</span>
+                </div>
+                <div class="sm-summary-row">
+                  <span>Ghế đã chọn</span>
+                  <span class="sm-selected-seats" id="sm-summary-seats">Chưa chọn ghế</span>
+                </div>
+                <div class="sm-summary-row">
+                  <span>Số lượng</span>
+                  <span id="sm-summary-count">0 ghế</span>
+                </div>
+                <div class="sm-summary-row total">
+                  <span>Tổng cộng</span>
+                  <span class="val-gold" id="sm-summary-total">0 ₫</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Footer actions -->
+          <div class="sm-footer">
+            <button class="sm-btn-back" id="sm-btn-back" style="display:none">← Quay lại</button>
+            <button class="sm-btn-confirm" id="sm-btn-confirm">
+              Tiếp theo →
+            </button>
+          </div>
+        </div>
+
+        <!-- Success screen -->
+        <div class="sm-success" id="sm-success">
+          <span class="success-icon">🎉</span>
+          <div class="success-title">Đặt vé thành công!</div>
+          <p class="success-subtitle">
+            Mã đặt vé của bạn đã được gửi qua email.<br/>
+            Vui lòng xuất trình mã khi đến rạp.
+          </p>
+          <div class="booking-code" id="sm-booking-code">—</div>
+          <br/>
+          <button class="sm-btn-done" id="sm-btn-done">Xong</button>
+        </div>
+
+      </div>
+    </div>
+  `
+}
+
+// ---- Open / Close ----
+function openSeatModal(movieId: number) {
+  const movie = nowShowingMovies.find(m => m.id === movieId)
+  if (!movie) return
+
+  // Remove old modal if exists
+  document.getElementById('seat-modal-backdrop')?.remove()
+
+  // Reset state
+  seatState.movieId = movieId
+  seatState.selectedSeats = []
+  seatState.currentStep = 1
+
+  // Inject modal
+  document.body.insertAdjacentHTML('beforeend', renderSeatModal(movie))
+
+  // Set summary time
+  const timeEl = document.getElementById('sm-summary-time')
+  if (timeEl) {
+    const dates = buildDates()
+    timeEl.textContent = `${dates[0].full} – ${showtimes[0].time} (${showtimes[0].type})`
+  }
+
+  // Animate open
+  requestAnimationFrame(() => {
+    document.getElementById('seat-modal-backdrop')?.classList.add('active')
+  })
+
+  attachModalListeners(movie)
+}
+
+function closeSeatModal() {
+  const backdrop = document.getElementById('seat-modal-backdrop')
+  if (!backdrop) return
+  backdrop.classList.remove('active')
+  setTimeout(() => backdrop.remove(), 350)
+}
+
+// ---- Attach all event listeners ----
+function attachModalListeners(movie: Movie) {
+  // Close button & backdrop click
+  document.getElementById('sm-close-btn')?.addEventListener('click', closeSeatModal)
+  document.getElementById('seat-modal-backdrop')?.addEventListener('click', (e) => {
+    if (e.target === document.getElementById('seat-modal-backdrop')) closeSeatModal()
+  })
+
+  // Date selection
+  document.getElementById('sm-dates')?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.sm-date-btn') as HTMLButtonElement
+    if (!btn) return
+    document.querySelectorAll('.sm-date-btn').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    seatState.selectedDate = btn.dataset.date || ''
+    updateSummaryTime()
+  })
+
+  // Time selection
+  document.getElementById('sm-times')?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.sm-time-btn') as HTMLButtonElement
+    if (!btn) return
+    document.querySelectorAll('.sm-time-btn').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    seatState.selectedTime = btn.dataset.time || ''
+    updateSummaryTime()
+  })
+
+  // Seat clicking (delegated)
+  document.getElementById('sm-seat-map')?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.seat') as HTMLButtonElement
+    if (!btn || btn.classList.contains('taken')) return
+
+    const seatId = btn.dataset.seat!
+    // seatType is read later from data-type attribute in updateSummary
+
+    if (btn.classList.contains('selected')) {
+      btn.classList.remove('selected')
+      seatState.selectedSeats = seatState.selectedSeats.filter(s => s !== seatId)
+    } else {
+      if (seatState.selectedSeats.length >= 8) {
+        showToast('Tối đa 8 ghế mỗi lần đặt', 'error')
+        return
+      }
+      btn.classList.add('selected')
+      seatState.selectedSeats.push(seatId)
+    }
+
+    updateSummary(movie)
+  })
+
+  // Back button
+  document.getElementById('sm-btn-back')?.addEventListener('click', () => {
+    goToStep(1)
+  })
+
+  // Confirm / Next button
+  document.getElementById('sm-btn-confirm')?.addEventListener('click', () => {
+    if (seatState.currentStep === 1) {
+      goToStep(2)
+    } else if (seatState.currentStep === 2) {
+      if (seatState.selectedSeats.length === 0) {
+        showToast('Vui lòng chọn ít nhất 1 ghế', 'error')
+        return
+      }
+      confirmBooking(movie)
+    }
+  })
+
+  // Done button
+  document.getElementById('sm-btn-done')?.addEventListener('click', closeSeatModal)
+
+  // ESC key
+  const escHandler = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      closeSeatModal()
+      document.removeEventListener('keydown', escHandler)
+    }
+  }
+  document.addEventListener('keydown', escHandler)
+}
+
+function goToStep(step: 1 | 2) {
+  seatState.currentStep = step
+  const step1Panel = document.getElementById('sm-step1-panel')!
+  const step2Panel = document.getElementById('sm-step2-panel')!
+  const backBtn   = document.getElementById('sm-btn-back')  as HTMLButtonElement
+  const confirmBtn = document.getElementById('sm-btn-confirm') as HTMLButtonElement
+
+  const s1 = document.getElementById('step-1')!
+  const s2 = document.getElementById('step-2')!
+  const s3 = document.getElementById('step-3')!
+
+  if (step === 1) {
+    step1Panel.style.display = ''
+    step2Panel.style.display = 'none'
+    backBtn.style.display = 'none'
+    confirmBtn.textContent = 'Tiếp theo →'
+    s1.className = 'sm-step active'
+    s2.className = 'sm-step'
+    s3.className = 'sm-step'
+  } else {
+    step1Panel.style.display = 'none'
+    step2Panel.style.display = ''
+    backBtn.style.display = ''
+    confirmBtn.textContent = 'Xác nhận đặt vé'
+    confirmBtn.disabled = seatState.selectedSeats.length === 0
+    s1.className = 'sm-step done'
+    s2.className = 'sm-step active'
+    s3.className = 'sm-step'
+  }
+}
+
+function updateSummaryTime() {
+  const timeEl = document.getElementById('sm-summary-time')
+  const activeTime = document.querySelector('.sm-time-btn.active') as HTMLButtonElement
+  const timeType = activeTime?.querySelector('.time-type')?.textContent || ''
+  if (timeEl) {
+    timeEl.textContent = `${seatState.selectedDate} – ${seatState.selectedTime} (${timeType})`
+  }
+}
+
+function updateSummary(movie: Movie) {
+  const seatsEl   = document.getElementById('sm-summary-seats')!
+  const countEl   = document.getElementById('sm-summary-count')!
+  const totalEl   = document.getElementById('sm-summary-total')!
+  const confirmBtn = document.getElementById('sm-btn-confirm') as HTMLButtonElement
+
+  const seats = seatState.selectedSeats
+
+  // Calculate price
+  let total = 0
+  seats.forEach(seatId => {
+    const btn = document.querySelector(`[data-seat="${seatId}"]`) as HTMLElement
+    const type = (btn?.dataset.type || 'normal') as 'normal' | 'vip' | 'sweetbox'
+    total += getSeatPrice(type)
+  })
+
+  seatsEl.textContent = seats.length > 0 ? seats.join(', ') : 'Chưa chọn ghế'
+  countEl.textContent = `${seats.length} ghế`
+  totalEl.textContent = total > 0
+    ? total.toLocaleString('vi-VN') + ' ₫'
+    : '0 ₫'
+
+  if (confirmBtn) {
+    confirmBtn.disabled = seats.length === 0
+  }
+
+  // unused param guard
+  void movie
+}
+
+function confirmBooking(_movie: Movie) {
+  const mainContent = document.getElementById('sm-main-content')!
+  const successEl   = document.getElementById('sm-success')!
+  const codeEl      = document.getElementById('sm-booking-code')!
+  const step3 = document.getElementById('step-3')!
+
+  // Mark step 3 active
+  document.getElementById('step-2')!.className = 'sm-step done'
+  step3.className = 'sm-step active'
+
+  // Generate random booking code
+  const code = 'CB' + Math.random().toString(36).substring(2, 8).toUpperCase()
+  codeEl.textContent = code
+
+  mainContent.style.display = 'none'
+  successEl.classList.add('show')
+  showToast('🎟️ Đặt vé thành công!', 'success')
+}
+
+// ---- Patch handleBooking to open the seat modal ----
+window.handleBooking = (movieId: number) => {
+  openSeatModal(movieId)
+}
+
+console.log('🎬 CineBooking + Seat Selection loaded!')
