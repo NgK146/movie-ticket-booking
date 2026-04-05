@@ -505,6 +505,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <li><a href="#cinemas">Cụm Rạp</a></li>
         <li><a href="#promotions">Khuyến Mãi</a></li>
         <li><a href="#members">Thành Viên</a></li>
+        <li><a href="#history" id="nav-history-btn">Lịch Sử</a></li>
       </ul>
 
       <div class="navbar-right">
@@ -803,6 +804,8 @@ declare global {
     filterGenre: (genre: string, btn: HTMLElement) => void
     filterCinema: (cinema: string, btn: HTMLElement) => void
     showToast: (message: string, type: 'success' | 'error' | 'info') => void
+    closeHistoryModal: () => void
+    viewTicketFromHistory: (index: number) => void
   }
 }
 
@@ -986,6 +989,24 @@ interface SeatState {
 }
 
 let currentTicket: TicketData | null = null
+
+function saveBooking(ticket: TicketData) {
+  const bookings = getBookings()
+  // Add to start (newest first)
+  bookings.unshift(ticket)
+  // Limit to last 30 bookings
+  localStorage.setItem('cine_bookings', JSON.stringify(bookings.slice(0, 30)))
+}
+
+function getBookings(): TicketData[] {
+  try {
+    const data = localStorage.getItem('cine_bookings')
+    return data ? JSON.parse(data) : []
+  } catch (e) {
+    console.error('Failed to parse bookings', e)
+    return []
+  }
+}
 
 const seatState: SeatState = {
   movieId: 0,
@@ -1862,6 +1883,11 @@ function processPayment(_movie: Movie) {
     mainContent.style.display = 'none'
     successEl.classList.add('show')
     showToast('🎟️ Đặt vé thành công!', 'success')
+
+    // Save to history
+    if (currentTicket) {
+      saveBooking(currentTicket)
+    }
   }, 1200)
 }
 
@@ -1870,4 +1896,163 @@ window.handleBooking = (movieId: number) => {
   openSeatModal(movieId)
 }
 
-console.log('🎬 CineBooking + Seat Selection loaded!')
+// ---- Booking History Modal ----
+function renderHistoryModal(): string {
+  const bookings = getBookings()
+  let listHTML = ''
+
+  if (bookings.length === 0) {
+    listHTML = `
+      <div class="history-empty">
+        <div class="empty-icon">🎟️</div>
+        <h3>Chưa có lịch sử đặt vé</h3>
+        <p>Bạn chưa thực hiện giao dịch nào. Hãy chọn phim và đặt vé ngay!</p>
+        <button class="btn-primary" onclick="closeHistoryModal()">Khám phá ngay</button>
+      </div>
+    `
+  } else {
+    listHTML = bookings.map((b, index) => {
+      // Find movie poster
+      const movie = [...nowShowingMovies, ...comingSoonMovies].find(m => m.title === b.movieTitle)
+      const poster = movie?.poster || 'https://images.unsplash.com/photo-1534809027769-b00d750a6bac?w=100&h=150&fit=crop&q=80'
+
+      return `
+        <div class="history-item">
+          <img src="${poster}" class="hi-poster" alt="${b.movieTitle}" />
+          <div class="hi-content">
+            <div class="hi-header">
+              <h4 class="hi-title">${b.movieTitle}</h4>
+              <span class="hi-code">${b.bookingCode}</span>
+            </div>
+            <div class="hi-details">
+              <div class="hi-row">
+                <span>📍 Suất chiếu:</span>
+                <b>${b.time} – ${b.date}</b>
+              </div>
+              <div class="hi-row">
+                <span>💺 Ghế:</span>
+                <b>${b.seats.join(', ')}</b>
+              </div>
+              <div class="hi-row">
+                <span>💰 Tổng tiền:</span>
+                <b class="hi-price">${b.totalAmount.toLocaleString('vi-VN')} ₫</b>
+              </div>
+            </div>
+            <div class="hi-footer">
+              <button class="hi-btn-view" onclick="viewTicketFromHistory(${index})">
+                👁️ Xem vé & QR
+              </button>
+            </div>
+          </div>
+        </div>
+      `
+    }).join('')
+  }
+
+  return `
+    <div class="modal-backdrop" id="history-modal-backdrop">
+      <div class="modal-content history-modal">
+        <div class="sm-header">
+          <div class="sm-title-box">
+            <h2 class="sm-title">Lịch Sử Đặt Vé</h2>
+            <p class="sm-subtitle">Danh sách các vé phim bạn đã đặt gần đây</p>
+          </div>
+          <button class="sm-close-btn" id="history-close-btn">×</button>
+        </div>
+        
+        <div class="history-list">
+          ${listHTML}
+        </div>
+      </div>
+    </div>
+  `
+}
+
+function openHistoryModal() {
+  document.getElementById('history-modal-backdrop')?.remove()
+  document.body.insertAdjacentHTML('beforeend', renderHistoryModal())
+  
+  const backdrop = document.getElementById('history-modal-backdrop')!
+  requestAnimationFrame(() => backdrop.classList.add('active'))
+
+  // Close handlers
+  document.getElementById('history-close-btn')?.addEventListener('click', closeHistoryModal)
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) closeHistoryModal()
+  })
+}
+
+function closeHistoryModal() {
+  const backdrop = document.getElementById('history-modal-backdrop')
+  if (!backdrop) return
+  backdrop.classList.remove('active')
+  setTimeout(() => backdrop.remove(), 350)
+}
+
+window.closeHistoryModal = closeHistoryModal
+
+window.viewTicketFromHistory = (index: number) => {
+  const bookings = getBookings()
+  const b = bookings[index]
+  if (!b) return
+
+  closeHistoryModal()
+  
+  // Reuse currentTicket for rendering
+  currentTicket = b
+  
+  // Simulate opening success modal with this ticket
+  const movie = [...nowShowingMovies, ...comingSoonMovies].find(m => m.title === b.movieTitle)
+  if (!movie) {
+    showToast('Không tìm thấy thông tin phim', 'error')
+    return
+  }
+
+  openSeatModal(movie.id)
+  
+  // Skip to step 3 success
+  setTimeout(() => {
+    // We need to bypass the normal flow to show success directly
+    const mainContent = document.getElementById('sm-main-content')!
+    const successEl   = document.getElementById('sm-success')!
+    const codeEl      = document.getElementById('sm-booking-code')!
+    const infoEl      = document.getElementById('success-info')
+    
+    document.getElementById('step-1')?.classList.add('done')
+    document.getElementById('step-2')?.classList.add('done')
+    document.getElementById('step-3')?.classList.add('done')
+
+    codeEl.textContent = b.bookingCode
+    
+    if (infoEl) {
+      const discountRow = (b.discountCode)
+        ? `<div class="sd-row"><span>Giảm giá (${b.discountCode})</span><b style="color:#10b981">Đã áp dụng</b></div>`
+        : ''
+      infoEl.innerHTML = `
+        <div class="success-detail-grid">
+          <div class="sd-row"><span>Khách hàng</span><b>${b.customerName}</b></div>
+          <div class="sd-row"><span>Ghế</span><b>${b.seats.join(', ')}</b></div>
+          <div class="sd-row"><span>Lịch chiếu</span><b>${b.time} – ${b.date}</b></div>
+          <div class="sd-row"><span>Thanh toán</span><b>${b.paymentMethod}</b></div>
+          ${discountRow}
+          <div class="sd-row total"><span>Tổng</span><b>${b.totalAmount.toLocaleString('vi-VN')} ₫</b></div>
+        </div>
+      `
+    }
+
+    // Render QR
+    const canvas = document.getElementById('sm-qr-canvas') as HTMLCanvasElement
+    if (canvas) renderQRToCanvas(canvas, b)
+
+    mainContent.style.display = 'none'
+    successEl.classList.add('show')
+  }, 100)
+}
+
+// Global history handler
+document.getElementById('nav-history-btn')?.addEventListener('click', (e) => {
+  e.preventDefault()
+  openHistoryModal()
+})
+
+console.log('🎬 CineBooking + History loaded!')
