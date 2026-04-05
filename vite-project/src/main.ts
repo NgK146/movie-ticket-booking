@@ -1,4 +1,5 @@
 import './style.css'
+import { renderQRToCanvas, downloadQR, type TicketData } from './qr.service'
 
 // =========================================
 // DATA: Phim Đang Chiếu
@@ -984,6 +985,8 @@ interface SeatState {
   discountPercent: number  // % off (0 if fixed)
 }
 
+let currentTicket: TicketData | null = null
+
 const seatState: SeatState = {
   movieId: 0,
   selectedSeats: [],
@@ -1386,9 +1389,19 @@ function renderSeatModal(movie: Movie): string {
           <div class="success-title">Đặt vé thành công!</div>
           <p class="success-subtitle">
             Mã đặt vé của bạn đã được gửi qua email.<br/>
-            Vui lòng xuất trình mã này khi đến rạp.
+            Vui lòng xuất trình mã QR này khi đến rạp.
           </p>
           <div class="booking-code" id="sm-booking-code">—</div>
+          
+          <div class="sm-qr-container">
+            <div class="sm-qr-wrap">
+              <canvas id="sm-qr-canvas"></canvas>
+            </div>
+            <button id="sm-btn-download" class="sm-btn-download">
+              💾 Tải vé về máy (PNG)
+            </button>
+          </div>
+
           <div class="success-info" id="success-info"></div>
           <br/>
           <button class="sm-btn-done" id="sm-btn-done">Xong</button>
@@ -1545,6 +1558,17 @@ function attachModalListeners(movie: Movie) {
 
   // Done button
   document.getElementById('sm-btn-done')?.addEventListener('click', closeSeatModal)
+
+  // Download button
+  document.getElementById('sm-btn-download')?.addEventListener('click', () => {
+    if (currentTicket) {
+      downloadQR(currentTicket)
+        .catch(err => {
+          console.error('Download QR failed:', err)
+          showToast('❌ Lỗi khi tải vé. Vui lòng thử lại.', 'error')
+        })
+    }
+  })
 
   // ESC key
   const escHandler = (e: KeyboardEvent) => {
@@ -1796,6 +1820,28 @@ function processPayment(_movie: Movie) {
     const subtotal    = seatState.totalSeat + calcComboTotal()
     const discountOff = calcDiscount(subtotal)
     const grand       = Math.max(0, subtotal - discountOff)
+
+    // Generate ticket data
+    currentTicket = {
+      bookingCode: code,
+      movieTitle: _movie.title,
+      cinema: 'CGV Vincom Center Bà Triệu', // Placeholder cinema
+      date: seatState.selectedDate,
+      time: seatState.selectedTime,
+      seats: seatState.selectedSeats,
+      customerName: nameEl.value.trim(),
+      totalAmount: grand,
+      paymentMethod: payLabel[seatState.paymentMethod],
+      ...(seatState.discountCode ? { discountCode: seatState.discountCode } : {})
+    }
+
+    // Render QR Code to the canvas
+    const canvas = document.getElementById('sm-qr-canvas') as HTMLCanvasElement
+    if (canvas) {
+      renderQRToCanvas(canvas, currentTicket).catch(err => {
+        console.error('QR rendering failed:', err)
+      })
+    }
 
     if (infoEl) {
       const discountRow = discountOff > 0
