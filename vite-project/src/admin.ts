@@ -1,6 +1,7 @@
 import { cinemas, type Cinema } from './Cinema';
 import { rooms, type Room } from './Room';
 import { showtimes, type Showtime } from './Showtime';
+import { coupons, type Coupon } from './Coupon';
 
 export interface Movie {
   id: string;
@@ -22,6 +23,7 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
   let editingCinema: Cinema | null = null;
   let editingRoom: Room | null = null;
   let editingShowtime: Showtime | null = null;
+  let editingCoupon: Coupon | null = null;
 
   function render() {
     container.innerHTML = `
@@ -34,6 +36,7 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
             <li class="${activeTab === 'cinemas' ? 'active' : ''}" id="tab-cinemas">🏛 Cinemas</li>
             <li class="${activeTab === 'rooms' ? 'active' : ''}" id="tab-rooms">🛋 Rooms</li>
             <li class="${activeTab === 'showtimes' ? 'active' : ''}" id="tab-showtimes">📅 Showtimes</li>
+            <li class="${activeTab === 'coupons' ? 'active' : ''}" id="tab-coupons">🎟 Coupons</li>
             <li>🎫 Bookings</li>
             <li>💰 Revenue</li>
           </ul>
@@ -56,6 +59,7 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
       case 'cinemas':   return renderCinemas();
       case 'rooms':     return renderRooms();
       case 'showtimes': return renderShowtimes();
+      case 'coupons':   return renderCoupons();
       default:          return renderDashboard();
     }
   }
@@ -65,6 +69,7 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
     if (editingCinema || activeTab === 'add-cinema') return renderCinemaForm();
     if (editingRoom || activeTab === 'add-room') return renderRoomForm();
     if (editingShowtime || activeTab === 'add-showtime') return renderShowtimeForm();
+    if (editingCoupon || activeTab === 'add-coupon') return renderCouponForm();
     return '';
   }
 
@@ -89,6 +94,10 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
         <div class="stat-card">
           <h3>Total Showtimes</h3>
           <p class="stat-value">${showtimes.length}</p>
+        </div>
+        <div class="stat-card">
+          <h3>Active Coupons</h3>
+          <p class="stat-value">${coupons.filter(c => c.status === 'active').length}</p>
         </div>
         <div class="stat-card">
           <h3>Total Bookings</h3>
@@ -471,6 +480,103 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
     `;
   }
 
+  function renderCoupons() {
+    return `
+      <header style="display: flex; justify-content: space-between; align-items: center;">
+        <h1>Coupons Management</h1>
+        <button id="add-coupon-btn" class="nav-admin-btn" style="padding: 10px 20px;">+ Add New Coupon</button>
+      </header>
+      <div class="admin-content-section">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Description</th>
+              <th>Discount Type</th>
+              <th>Value</th>
+              <th>Min Order</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${coupons.map(c => `
+              <tr>
+                <td><code style="background:rgba(251,211,141,0.1); color:#fbd38d; padding:2px 6px; border-radius:4px">${c.code}</code></td>
+                <td style="font-size:13px">${c.label}</td>
+                <td>${c.type === 'percent' ? 'Percentage' : 'Fixed Amount'}</td>
+                <td><strong>${c.type === 'percent' ? `${c.value}%` : `${c.value.toLocaleString('vi-VN')} ₫`}</strong></td>
+                <td>${c.minOrder > 0 ? `${c.minOrder.toLocaleString('vi-VN')} ₫` : 'No minimum'}</td>
+                <td><span class="badge ${c.status === 'active' ? 'success' : 'pending'}">${c.status}</span></td>
+                <td>
+                  <div class="action-btns">
+                    <button class="edit-coupon-btn" data-id="${c.id}">Edit</button>
+                    <button class="delete-coupon-btn" data-id="${c.id}">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function renderCouponForm() {
+    const isEditing = !!editingCoupon;
+    return `
+      <div class="modal-overlay">
+        <div class="modal-content auth-card">
+          <h2>${isEditing ? 'Edit Coupon' : 'Add New Coupon'}</h2>
+          <form id="coupon-form">
+            <div class="form-row" style="display: flex; gap: 15px;">
+              <div class="form-group" style="flex: 1;">
+                <label for="cp-code">Coupon Code</label>
+                <input type="text" id="cp-code" value="${isEditing ? editingCoupon!.code : ''}" placeholder="e.g. SUMMER20" required>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label for="cp-status">Status</label>
+                <select id="cp-status">
+                  <option value="active" ${isEditing && editingCoupon!.status === 'active' ? 'selected' : ''}>Active</option>
+                  <option value="expired" ${isEditing && editingCoupon!.status === 'expired' ? 'selected' : ''}>Expired</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="cp-label">Description</label>
+              <input type="text" id="cp-label" value="${isEditing ? editingCoupon!.label : ''}" placeholder="e.g. Giảm 20% cho đơn hàng tiếp theo" required>
+            </div>
+
+            <div class="form-row" style="display: flex; gap: 15px;">
+              <div class="form-group" style="flex: 1;">
+                <label for="cp-type">Discount Type</label>
+                <select id="cp-type">
+                  <option value="percent" ${isEditing && editingCoupon!.type === 'percent' ? 'selected' : ''}>Percentage (%)</option>
+                  <option value="fixed" ${isEditing && editingCoupon!.type === 'fixed' ? 'selected' : ''}>Fixed Amount (₫)</option>
+                </select>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label for="cp-value">Discount Value</label>
+                <input type="number" id="cp-value" value="${isEditing ? editingCoupon!.value : ''}" required>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="cp-min-order">Minimum Order Amount (₫)</label>
+              <input type="number" id="cp-min-order" value="${isEditing ? editingCoupon!.minOrder : '0'}" required>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+              <button type="submit" class="auth-button">${isEditing ? 'Update Coupon' : 'Add Coupon'}</button>
+              <button type="button" id="cancel-form-btn" class="auth-button" style="background: var(--border); color: var(--text-h);">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+  }
+
   function setupEventListeners() {
     document.getElementById('admin-back-btn')?.addEventListener('click', onBack);
     
@@ -496,6 +602,11 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
 
     document.getElementById('tab-showtimes')?.addEventListener('click', () => {
       activeTab = 'showtimes';
+      render();
+    });
+
+    document.getElementById('tab-coupons')?.addEventListener('click', () => {
+      activeTab = 'coupons';
       render();
     });
 
@@ -674,6 +785,50 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
       render();
     });
 
+    // --- COUPON ACTIONS ---
+    document.getElementById('add-coupon-btn')?.addEventListener('click', () => {
+      activeTab = 'add-coupon';
+      editingCoupon = null;
+      render();
+    });
+
+    document.querySelectorAll('.edit-coupon-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
+        editingCoupon = coupons.find(c => c.id === id) || null;
+        render();
+      });
+    });
+
+    document.querySelectorAll('.delete-coupon-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
+        const index = coupons.findIndex(c => c.id === id);
+        if (index !== -1) coupons.splice(index, 1);
+        render();
+      });
+    });
+
+    document.getElementById('coupon-form')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const code = (document.getElementById('cp-code') as HTMLInputElement).value.toUpperCase();
+      const label = (document.getElementById('cp-label') as HTMLInputElement).value;
+      const type = (document.getElementById('cp-type') as HTMLSelectElement).value as any;
+      const value = parseInt((document.getElementById('cp-value') as HTMLInputElement).value);
+      const minOrder = parseInt((document.getElementById('cp-min-order') as HTMLInputElement).value);
+      const status = (document.getElementById('cp-status') as HTMLSelectElement).value as any;
+
+      if (editingCoupon) {
+        const index = coupons.findIndex(c => c.id === editingCoupon!.id);
+        coupons[index] = { ...editingCoupon, code, label, type, value, minOrder, status };
+      } else {
+        coupons.push({ id: 'cp' + (coupons.length + 1), code, label, type, value, minOrder, status });
+      }
+      editingCoupon = null;
+      activeTab = 'coupons';
+      render();
+    });
+
     // --- SHARED ---
     document.getElementById('cancel-form-btn')?.addEventListener('click', () => {
       activeTab = activeTab.replace('add-', '').replace('edit-', ''); // simplified
@@ -681,11 +836,13 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
       if (activeTab === 'cinema') activeTab = 'cinemas';
       if (activeTab === 'room') activeTab = 'rooms';
       if (activeTab === 'showtime') activeTab = 'showtimes';
+      if (activeTab === 'coupon') activeTab = 'coupons';
 
       editingMovie = null;
       editingCinema = null;
       editingRoom = null;
       editingShowtime = null;
+      editingCoupon = null;
       render();
     });
   }
