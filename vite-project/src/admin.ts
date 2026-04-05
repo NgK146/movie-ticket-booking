@@ -1,5 +1,6 @@
 import { cinemas, type Cinema } from './Cinema';
 import { rooms, type Room } from './Room';
+import { showtimes, type Showtime } from './Showtime';
 
 export interface Movie {
   id: string;
@@ -20,6 +21,7 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
   let editingMovie: Movie | null = null;
   let editingCinema: Cinema | null = null;
   let editingRoom: Room | null = null;
+  let editingShowtime: Showtime | null = null;
 
   function render() {
     container.innerHTML = `
@@ -31,6 +33,7 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
             <li class="${activeTab === 'movies' ? 'active' : ''}" id="tab-movies">🎬 Movies</li>
             <li class="${activeTab === 'cinemas' ? 'active' : ''}" id="tab-cinemas">🏛 Cinemas</li>
             <li class="${activeTab === 'rooms' ? 'active' : ''}" id="tab-rooms">🛋 Rooms</li>
+            <li class="${activeTab === 'showtimes' ? 'active' : ''}" id="tab-showtimes">📅 Showtimes</li>
             <li>🎫 Bookings</li>
             <li>💰 Revenue</li>
           </ul>
@@ -52,6 +55,7 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
       case 'movies':    return renderMovies();
       case 'cinemas':   return renderCinemas();
       case 'rooms':     return renderRooms();
+      case 'showtimes': return renderShowtimes();
       default:          return renderDashboard();
     }
   }
@@ -60,6 +64,7 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
     if (editingMovie || activeTab === 'add-movie') return renderMovieForm();
     if (editingCinema || activeTab === 'add-cinema') return renderCinemaForm();
     if (editingRoom || activeTab === 'add-room') return renderRoomForm();
+    if (editingShowtime || activeTab === 'add-showtime') return renderShowtimeForm();
     return '';
   }
 
@@ -80,6 +85,10 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
         <div class="stat-card">
           <h3>Total Rooms</h3>
           <p class="stat-value">${rooms.length}</p>
+        </div>
+        <div class="stat-card">
+          <h3>Total Showtimes</h3>
+          <p class="stat-value">${showtimes.length}</p>
         </div>
         <div class="stat-card">
           <h3>Total Bookings</h3>
@@ -349,6 +358,119 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
     `;
   }
 
+  function renderShowtimes() {
+    return `
+      <header style="display: flex; justify-content: space-between; align-items: center;">
+        <h1>Showtimes Management</h1>
+        <button id="add-showtime-btn" class="nav-admin-btn" style="padding: 10px 20px;">+ Add New Showtime</button>
+      </header>
+      <div class="admin-content-section">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Movie</th>
+              <th>Cinema</th>
+              <th>Room</th>
+              <th>Date/Time</th>
+              <th>Price</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${showtimes.map(s => `
+              <tr>
+                <td><strong>${s.movieTitle}</strong></td>
+                <td>${s.cinemaName}</td>
+                <td>${s.roomName}</td>
+                <td>
+                  <div>${s.date}</div>
+                  <div style="font-size:12px; opacity:0.7">${s.startTime} (${s.language})</div>
+                </td>
+                <td>${s.price.toLocaleString('vi-VN')} ₫</td>
+                <td>
+                  <div class="action-btns">
+                    <button class="edit-showtime-btn" data-id="${s.id}">Edit</button>
+                    <button class="delete-showtime-btn" data-id="${s.id}">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function renderShowtimeForm() {
+    const isEditing = !!editingShowtime;
+    return `
+      <div class="modal-overlay">
+        <div class="modal-content auth-card" style="max-width: 500px">
+          <h2>${isEditing ? 'Edit Showtime' : 'Add New Showtime'}</h2>
+          <form id="showtime-form">
+            <div class="form-group">
+              <label for="st-movie">Movie</label>
+              <select id="st-movie" required>
+                ${movies.map(m => `
+                  <option value="${m.id}" ${isEditing && editingShowtime!.movieId === parseInt(m.id) ? 'selected' : ''}>${m.title}</option>
+                `).join('')}
+              </select>
+            </div>
+            
+            <div class="form-row" style="display: flex; gap: 15px;">
+              <div class="form-group" style="flex: 1;">
+                <label for="st-cinema">Cinema</label>
+                <select id="st-cinema" required>
+                  ${cinemas.map(c => `
+                    <option value="${c.id}" ${isEditing && editingShowtime!.cinemaId === c.id ? 'selected' : ''}>${c.name}</option>
+                  `).join('')}
+                </select>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label for="st-room">Room</label>
+                <select id="st-room" required>
+                  ${rooms.map(r => `
+                    <option value="${r.id}" ${isEditing && editingShowtime!.roomId === r.id ? 'selected' : ''}>${r.name}</option>
+                  `).join('')}
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row" style="display: flex; gap: 15px;">
+              <div class="form-group" style="flex: 1;">
+                <label for="st-date">Date</label>
+                <input type="date" id="st-date" value="${isEditing ? editingShowtime!.date : ''}" required>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label for="st-time">Start Time</label>
+                <input type="time" id="st-time" value="${isEditing ? editingShowtime!.startTime : ''}" required>
+              </div>
+            </div>
+
+            <div class="form-row" style="display: flex; gap: 15px;">
+              <div class="form-group" style="flex: 1;">
+                <label for="st-price">Price (₫)</label>
+                <input type="number" id="st-price" value="${isEditing ? editingShowtime!.price : '75000'}" required>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label for="st-lang">Language</label>
+                <select id="st-lang">
+                  <option value="Lồng tiếng" ${isEditing && editingShowtime!.language === 'Lồng tiếng' ? 'selected' : ''}>Lồng tiếng</option>
+                  <option value="Phụ đề" ${isEditing && editingShowtime!.language === 'Phụ đề' ? 'selected' : ''}>Phụ đề</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+              <button type="submit" class="auth-button">${isEditing ? 'Update Showtime' : 'Add Showtime'}</button>
+              <button type="button" id="cancel-form-btn" class="auth-button" style="background: var(--border); color: var(--text-h);">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+  }
+
   function setupEventListeners() {
     document.getElementById('admin-back-btn')?.addEventListener('click', onBack);
     
@@ -369,6 +491,11 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
 
     document.getElementById('tab-rooms')?.addEventListener('click', () => {
       activeTab = 'rooms';
+      render();
+    });
+
+    document.getElementById('tab-showtimes')?.addEventListener('click', () => {
+      activeTab = 'showtimes';
       render();
     });
 
@@ -498,16 +625,67 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
       render();
     });
 
+    // --- SHOWTIME ACTIONS ---
+    document.getElementById('add-showtime-btn')?.addEventListener('click', () => {
+      activeTab = 'add-showtime';
+      editingShowtime = null;
+      render();
+    });
+
+    document.querySelectorAll('.edit-showtime-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
+        editingShowtime = showtimes.find(s => s.id === id) || null;
+        render();
+      });
+    });
+
+    document.querySelectorAll('.delete-showtime-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
+        const index = showtimes.findIndex(s => s.id === id);
+        if (index !== -1) showtimes.splice(index, 1);
+        render();
+      });
+    });
+
+    document.getElementById('showtime-form')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const movieId = parseInt((document.getElementById('st-movie') as HTMLSelectElement).value);
+      const cinemaId = (document.getElementById('st-cinema') as HTMLSelectElement).value;
+      const roomId = (document.getElementById('st-room') as HTMLSelectElement).value;
+      const date = (document.getElementById('st-date') as HTMLInputElement).value;
+      const startTime = (document.getElementById('st-time') as HTMLInputElement).value;
+      const price = parseInt((document.getElementById('st-price') as HTMLInputElement).value);
+      const language = (document.getElementById('st-lang') as HTMLSelectElement).value;
+
+      const movieTitle = movies.find(m => parseInt(m.id) === movieId)?.title || 'Unknown';
+      const cinemaName = cinemas.find(c => c.id === cinemaId)?.name || 'Unknown';
+      const roomName   = rooms.find(r => r.id === roomId)?.name || 'Unknown';
+
+      if (editingShowtime) {
+        const index = showtimes.findIndex(s => s.id === editingShowtime!.id);
+        showtimes[index] = { ...editingShowtime, movieId, movieTitle, cinemaId, cinemaName, roomId, roomName, date, startTime, price, language };
+      } else {
+        showtimes.push({ id: 's' + (showtimes.length + 1), movieId, movieTitle, cinemaId, cinemaName, roomId, roomName, date, startTime, price, language });
+      }
+      editingShowtime = null;
+      activeTab = 'showtimes';
+      render();
+    });
+
     // --- SHARED ---
     document.getElementById('cancel-form-btn')?.addEventListener('click', () => {
       activeTab = activeTab.replace('add-', '').replace('edit-', ''); // simplified
       if (activeTab === 'movie') activeTab = 'movies';
       if (activeTab === 'cinema') activeTab = 'cinemas';
       if (activeTab === 'room') activeTab = 'rooms';
+      if (activeTab === 'showtime') activeTab = 'showtimes';
 
       editingMovie = null;
       editingCinema = null;
       editingRoom = null;
+      editingShowtime = null;
       render();
     });
   }
