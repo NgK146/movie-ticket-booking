@@ -976,9 +976,12 @@ interface SeatState {
   selectedDate: string
   selectedTime: string
   currentStep: 1 | 2 | 3
-  selectedCombos: Record<string, number>  // comboId -> qty
+  selectedCombos: Record<string, number>
   paymentMethod: string
   totalSeat: number
+  discountCode: string
+  discountAmount: number   // VND off
+  discountPercent: number  // % off (0 if fixed)
 }
 
 const seatState: SeatState = {
@@ -990,6 +993,26 @@ const seatState: SeatState = {
   selectedCombos: {},
   paymentMethod: 'momo',
   totalSeat: 0,
+  discountCode: '',
+  discountAmount: 0,
+  discountPercent: 0,
+}
+
+// ---- Coupon codes ----
+interface CouponDef {
+  type: 'percent' | 'fixed'
+  value: number          // % or VND
+  minOrder: number       // minimum grand total to apply
+  label: string
+}
+
+const COUPONS: Record<string, CouponDef> = {
+  'CINE10':   { type: 'percent', value: 10, minOrder: 0,      label: 'Giảm 10%' },
+  'CINE20':   { type: 'percent', value: 20, minOrder: 200000, label: 'Giảm 20% (đơn ≥ 200k)' },
+  'SAVE50K':  { type: 'fixed',   value: 50000,  minOrder: 0,  label: 'Giảm 50.000 ₫' },
+  'SAVE100K': { type: 'fixed',   value: 100000, minOrder: 300000, label: 'Giảm 100.000 ₫ (đơn ≥ 300k)' },
+  'WELCOME':  { type: 'fixed',   value: 30000,  minOrder: 0,  label: 'Giảm 30.000 ₫' },
+  'VIP2025':  { type: 'percent', value: 15, minOrder: 0,      label: 'Giảm 15% VIP' },
 }
 
 // Seat prices
@@ -1310,6 +1333,20 @@ function renderSeatModal(movie: Movie): string {
                 </label>
               </div>
 
+              <!-- Coupon code -->
+              <p class="sm-section-label" style="margin-top:18px">🎫 Mã giảm giá</p>
+              <div class="coupon-row">
+                <input class="ck-input coupon-input" id="coupon-input"
+                  type="text" placeholder="Nhập mã (VD: CINE10, SAVE50K...)" maxlength="20"
+                  autocomplete="off" spellcheck="false" />
+                <button class="coupon-apply-btn" id="coupon-apply-btn">Áp dụng</button>
+              </div>
+              <div class="coupon-hint">
+                Mã test: <code>CINE10</code> · <code>CINE20</code> · <code>SAVE50K</code> ·
+                <code>SAVE100K</code> · <code>WELCOME</code> · <code>VIP2025</code>
+              </div>
+              <div class="coupon-feedback" id="coupon-feedback" style="display:none"></div>
+
               <!-- Final total -->
               <div class="ck-total-box">
                 <div class="ck-total-row">
@@ -1319,6 +1356,10 @@ function renderSeatModal(movie: Movie): string {
                 <div class="ck-total-row">
                   <span>Combo</span>
                   <span id="ck-combo-total">0 ₫</span>
+                </div>
+                <div class="ck-total-row ck-discount-row" id="ck-discount-row" style="display:none">
+                  <span id="ck-discount-label">Giảm giá</span>
+                  <span class="val-discount" id="ck-discount-val">− 0 ₫</span>
                 </div>
                 <div class="ck-total-row ck-grand">
                   <span>Tổng thanh toán</span>
@@ -1494,6 +1535,14 @@ function attachModalListeners(movie: Movie) {
     if (radio) radio.checked = true
   })
 
+  // Coupon apply button
+  document.getElementById('coupon-apply-btn')?.addEventListener('click', () => {
+    applyDiscount()
+  })
+  document.getElementById('coupon-input')?.addEventListener('keydown', (e) => {
+    if ((e as KeyboardEvent).key === 'Enter') applyDiscount()
+  })
+
   // Done button
   document.getElementById('sm-btn-done')?.addEventListener('click', closeSeatModal)
 
@@ -1628,13 +1677,86 @@ function calcComboTotal(): number {
     .reduce((sum, [id, qty]) => sum + (prices[id] || 0) * qty, 0)
 }
 
+function calcDiscount(subtotal: number): number {
+  if (!seatState.discountCode) return 0
+  if (seatState.discountPercent > 0) {
+    return Math.round(subtotal * seatState.discountPercent / 100)
+  }
+  return Math.min(seatState.discountAmount, subtotal)
+}
+
+function applyDiscount() {
+  const input    = document.getElementById('coupon-input')    as HTMLInputElement
+  const feedback = document.getElementById('coupon-feedback') as HTMLElement
+  const code     = input.value.trim().toUpperCase()
+
+  feedback.style.display = 'block'
+
+  if (!code) {
+    feedback.className = 'coupon-feedback error'
+    feedback.textContent = '⚠️ Vui lòng nhập mã giảm giá'
+    return
+  }
+
+  const coupon = COUPONS[code]
+  if (!coupon) {
+    feedback.className = 'coupon-feedback error'
+    feedback.textContent = '❌ Mã không hợp lệ hoặc đã hết hạn'
+    seatState.discountCode = ''
+    seatState.discountAmount = 0
+    seatState.discountPercent = 0
+    updateCheckoutTotals()
+    return
+  }
+
+  const subtotal = seatState.totalSeat + calcComboTotal()
+  if (subtotal < coupon.minOrder) {
+    feedback.className = 'coupon-feedback error'
+    feedback.textContent = `❌ Mã này yêu cầu đơn tối thiểu ${coupon.minOrder.toLocaleString('vi-VN')} ₫`
+    seatState.discountCode = ''
+    seatState.discountAmount = 0
+    seatState.discountPercent = 0
+    updateCheckoutTotals()
+    return
+  }
+
+  // Valid!
+  seatState.discountCode = code
+  seatState.discountAmount  = coupon.type === 'fixed'   ? coupon.value : 0
+  seatState.discountPercent = coupon.type === 'percent' ? coupon.value : 0
+
+  feedback.className = 'coupon-feedback success'
+  feedback.textContent = `✅ Áp dụng thành công: ${coupon.label}`
+  input.value = code
+
+  updateCheckoutTotals()
+  showToast(`🎟️ Mã "${code}" - ${coupon.label}`, 'success')
+}
+
 function updateCheckoutTotals() {
-  const comboTotal = calcComboTotal()
-  const grand = seatState.totalSeat + comboTotal
-  const comboEl = document.getElementById('ck-combo-total')
-  const grandEl = document.getElementById('ck-grand-total')
-  if (comboEl) comboEl.textContent = comboTotal > 0 ? comboTotal.toLocaleString('vi-VN') + ' ₫' : '0 ₫'
-  if (grandEl) grandEl.textContent = grand.toLocaleString('vi-VN') + ' ₫'
+  const comboTotal    = calcComboTotal()
+  const subtotal      = seatState.totalSeat + comboTotal
+  const discountOff   = calcDiscount(subtotal)
+  const grand         = Math.max(0, subtotal - discountOff)
+
+  const comboEl    = document.getElementById('ck-combo-total')
+  const grandEl    = document.getElementById('ck-grand-total')
+  const discRow    = document.getElementById('ck-discount-row')    as HTMLElement | null
+  const discLabel  = document.getElementById('ck-discount-label')
+  const discVal    = document.getElementById('ck-discount-val')
+
+  if (comboEl)   comboEl.textContent   = comboTotal > 0 ? comboTotal.toLocaleString('vi-VN') + ' ₫' : '0 ₫'
+  if (grandEl)   grandEl.textContent   = grand.toLocaleString('vi-VN') + ' ₫'
+
+  if (discRow) {
+    if (discountOff > 0) {
+      discRow.style.display = ''
+      if (discLabel) discLabel.textContent = `Giảm giá (${seatState.discountCode})`
+      if (discVal)   discVal.textContent   = `− ${discountOff.toLocaleString('vi-VN')} ₫`
+    } else {
+      discRow.style.display = 'none'
+    }
+  }
 }
 
 function processPayment(_movie: Movie) {
@@ -1671,15 +1793,21 @@ function processPayment(_movie: Movie) {
     const payLabel: Record<string, string> = {
       momo: 'MoMo', vnpay: 'VNPay', banking: 'Chuyển khoản', counter: 'Tại quầy'
     }
-    const grand = seatState.totalSeat + calcComboTotal()
+    const subtotal    = seatState.totalSeat + calcComboTotal()
+    const discountOff = calcDiscount(subtotal)
+    const grand       = Math.max(0, subtotal - discountOff)
 
     if (infoEl) {
+      const discountRow = discountOff > 0
+        ? `<div class="sd-row"><span>Giảm giá (${seatState.discountCode})</span><b style="color:#10b981">− ${discountOff.toLocaleString('vi-VN')} ₫</b></div>`
+        : ''
       infoEl.innerHTML = `
         <div class="success-detail-grid">
           <div class="sd-row"><span>Khách hàng</span><b>${nameEl.value.trim()}</b></div>
           <div class="sd-row"><span>Ghế</span><b>${seatState.selectedSeats.join(', ')}</b></div>
           <div class="sd-row"><span>Lịch chiếu</span><b>${seatState.selectedTime} – ${seatState.selectedDate}</b></div>
           <div class="sd-row"><span>Thanh toán</span><b>${payLabel[seatState.paymentMethod]}</b></div>
+          ${discountRow}
           <div class="sd-row total"><span>Tổng</span><b>${grand.toLocaleString('vi-VN')} ₫</b></div>
         </div>
       `
