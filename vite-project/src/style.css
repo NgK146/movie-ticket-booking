@@ -2160,3 +2160,276 @@ body {
   .seat { width: 26px; height: 24px; }
   .seat.sweetbox { width: 56px; }
 }
+
+/* =========================================
+   CHECKOUT STEP 3
+   ========================================= */
+
+/* Order recap strip */
+.ck-recap {
+  background: rgba(255,61,90,0.06);
+  border: 1px solid rgba(255,61,90,0.18);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ck-recap-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13px;
+  gap: 12px;
+}
+
+.ck-label { color: #5a5a72; flex-shrink: 0; }
+.ck-val   { color: #f0f0f5; font-weight: 600; text-align: right; }
+
+/* Combo list */
+.combo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.combo-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  transition: border-color 0.2s;
+}
+
+.combo-card:hover {
+  border-color: rgba(255,255,255,0.13);
+}
+
+.combo-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+  width: 40px;
+  text-align: center;
+}
+
+.combo-info { flex: 1; min-width: 0; }
+
+.combo-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f0f0f5;
+  margin-bottom: 2px;
+}
+
+.combo-price {
+  font-size: 12px;
+  color: #ffd700;
+  font-weight: 700;
+}
+
+.combo-qty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.qty-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #f0f0f5;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.qty-btn:hover {
+  background: rgba(255,61,90,0.2);
+  border-color: rgba(255,61,90,0.4);
+  color: #ff3d5a;
+}
+
+.qty-val {
+  font-family: 'Outfit', sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  color: #f0f0f5;
+  min-width: 20px;
+  text-align: center;
+}
+
+/* Contact form */
+.ck-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ck-field { display: flex; flex-direction: column; gap: 5px; }
+
+.ck-field-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #5a5a72;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.ck-input {
+  padding: 11px 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  color: #f0f0f5;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+  color-scheme: dark;
+}
+
+.ck-input::placeholder { color: #5a5a72; }
+
+.ck-input:focus {
+  border-color: rgba(255,61,90,0.5);
+  background: rgba(255,61,90,0.05);
+}
+
+.ck-input:focus-visible {
+  outline: 2px solid rgba(255,61,90,0.3);
+  outline-offset: 2px;
+}
+
+/* Payment methods */
+.pay-methods {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.pay-method {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1.5px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.pay-method:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.15);
+}
+
+.pay-method.active {
+  background: rgba(255,61,90,0.08);
+  border-color: rgba(255,61,90,0.45);
+}
+
+.pay-icon { font-size: 20px; flex-shrink: 0; }
+
+.pay-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #9494b0;
+  flex: 1;
+  transition: color 0.2s;
+}
+
+.pay-method.active .pay-name { color: #f0f0f5; }
+
+.pay-check {
+  font-size: 13px;
+  font-weight: 800;
+  color: #ff3d5a;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.pay-method.active .pay-check { opacity: 1; }
+
+/* Checkout total box */
+.ck-total-box {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ck-total-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #9494b0;
+}
+
+.ck-total-row.ck-grand {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f0f0f5;
+  padding-top: 10px;
+  margin-top: 4px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+/* Success detail grid */
+.success-info {
+  margin: 16px auto 0;
+  max-width: 360px;
+  width: 100%;
+}
+
+.success-detail-grid {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  overflow: hidden;
+  text-align: left;
+}
+
+.sd-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.sd-row:last-child { border-bottom: none; }
+
+.sd-row span { color: #5a5a72; }
+.sd-row b    { color: #f0f0f5; font-weight: 600; text-align: right; max-width: 200px; }
+
+.sd-row.total {
+  background: rgba(255,215,0,0.05);
+}
+.sd-row.total span { color: #9494b0; }
+.sd-row.total b    { color: #ffd700; font-weight: 800; font-size: 15px; }
+
+/* Responsive for checkout */
+@media (max-width: 480px) {
+  .pay-methods { grid-template-columns: 1fr 1fr; }
+  .combo-card  { gap: 10px; }
+  .combo-icon  { font-size: 20px; width: 30px; }
+}

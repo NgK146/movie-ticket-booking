@@ -975,7 +975,10 @@ interface SeatState {
   selectedSeats: string[]
   selectedDate: string
   selectedTime: string
-  currentStep: 1 | 2
+  currentStep: 1 | 2 | 3
+  selectedCombos: Record<string, number>  // comboId -> qty
+  paymentMethod: string
+  totalSeat: number
 }
 
 const seatState: SeatState = {
@@ -984,6 +987,9 @@ const seatState: SeatState = {
   selectedDate: '',
   selectedTime: '',
   currentStep: 1,
+  selectedCombos: {},
+  paymentMethod: 'momo',
+  totalSeat: 0,
 }
 
 // Seat prices
@@ -1128,7 +1134,7 @@ function renderSeatModal(movie: Movie): string {
         <div class="sm-steps" aria-label="Các bước đặt vé">
           <div class="sm-step active" id="step-1">
             <div class="sm-step-num">1</div>
-            <span class="sm-step-text">Chọn lịch chiếu</span>
+            <span class="sm-step-text">Lịch chiếu</span>
           </div>
           <div class="sm-step-line"></div>
           <div class="sm-step" id="step-2">
@@ -1138,7 +1144,7 @@ function renderSeatModal(movie: Movie): string {
           <div class="sm-step-line"></div>
           <div class="sm-step" id="step-3">
             <div class="sm-step-num">3</div>
-            <span class="sm-step-text">Xác nhận</span>
+            <span class="sm-step-text">Thanh toán</span>
           </div>
         </div>
 
@@ -1198,6 +1204,130 @@ function renderSeatModal(movie: Movie): string {
               </div>
             </div>
 
+            <!-- Step 3: Checkout -->
+            <div id="sm-step3-panel" style="display:none">
+
+              <!-- Order recap -->
+              <div class="ck-recap" id="ck-recap">
+                <div class="ck-recap-row">
+                  <span class="ck-label">Phim</span>
+                  <span class="ck-val" id="ck-movie-title">—</span>
+                </div>
+                <div class="ck-recap-row">
+                  <span class="ck-label">Lịch chiếu</span>
+                  <span class="ck-val" id="ck-showtime">—</span>
+                </div>
+                <div class="ck-recap-row">
+                  <span class="ck-label">Ghế</span>
+                  <span class="ck-val" id="ck-seats">—</span>
+                </div>
+              </div>
+
+              <!-- Combo -->
+              <p class="sm-section-label" style="margin-top:18px">🍿 Thêm Combo (tuỳ chọn)</p>
+              <div class="combo-list">
+                <div class="combo-card" data-combo-id="c1" data-combo-price="65000">
+                  <div class="combo-icon">🍿</div>
+                  <div class="combo-info">
+                    <div class="combo-name">Bắp Đơn + Nước</div>
+                    <div class="combo-price">65.000 ₫</div>
+                  </div>
+                  <div class="combo-qty">
+                    <button class="qty-btn" data-action="minus" data-combo="c1">−</button>
+                    <span class="qty-val" id="qty-c1">0</span>
+                    <button class="qty-btn" data-action="plus" data-combo="c1">+</button>
+                  </div>
+                </div>
+                <div class="combo-card" data-combo-id="c2" data-combo-price="120000">
+                  <div class="combo-icon">🍿🥤</div>
+                  <div class="combo-info">
+                    <div class="combo-name">Combo Đôi (2 Bắp + 2 Nước)</div>
+                    <div class="combo-price">120.000 ₫</div>
+                  </div>
+                  <div class="combo-qty">
+                    <button class="qty-btn" data-action="minus" data-combo="c2">−</button>
+                    <span class="qty-val" id="qty-c2">0</span>
+                    <button class="qty-btn" data-action="plus" data-combo="c2">+</button>
+                  </div>
+                </div>
+                <div class="combo-card" data-combo-id="c3" data-combo-price="85000">
+                  <div class="combo-icon">🌭🥤</div>
+                  <div class="combo-info">
+                    <div class="combo-name">Hotdog + Nước Lớn</div>
+                    <div class="combo-price">85.000 ₫</div>
+                  </div>
+                  <div class="combo-qty">
+                    <button class="qty-btn" data-action="minus" data-combo="c3">−</button>
+                    <span class="qty-val" id="qty-c3">0</span>
+                    <button class="qty-btn" data-action="plus" data-combo="c3">+</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Contact info -->
+              <p class="sm-section-label" style="margin-top:18px">👤 Thông tin người đặt</p>
+              <div class="ck-form">
+                <div class="ck-field">
+                  <label class="ck-field-label" for="ck-name">Họ và tên *</label>
+                  <input class="ck-input" id="ck-name" type="text" placeholder="Nguyễn Văn A" required />
+                </div>
+                <div class="ck-field">
+                  <label class="ck-field-label" for="ck-phone">Số điện thoại *</label>
+                  <input class="ck-input" id="ck-phone" type="tel" placeholder="0912 345 678" required />
+                </div>
+                <div class="ck-field">
+                  <label class="ck-field-label" for="ck-email">Email (nhận mã vé)</label>
+                  <input class="ck-input" id="ck-email" type="email" placeholder="email@example.com" />
+                </div>
+              </div>
+
+              <!-- Payment method -->
+              <p class="sm-section-label" style="margin-top:18px">💳 Phương thức thanh toán</p>
+              <div class="pay-methods">
+                <label class="pay-method active" data-method="momo">
+                  <input type="radio" name="payment" value="momo" checked hidden />
+                  <span class="pay-icon">💜</span>
+                  <span class="pay-name">MoMo</span>
+                  <span class="pay-check">✓</span>
+                </label>
+                <label class="pay-method" data-method="vnpay">
+                  <input type="radio" name="payment" value="vnpay" hidden />
+                  <span class="pay-icon">🔵</span>
+                  <span class="pay-name">VNPay</span>
+                  <span class="pay-check">✓</span>
+                </label>
+                <label class="pay-method" data-method="banking">
+                  <input type="radio" name="payment" value="banking" hidden />
+                  <span class="pay-icon">🏦</span>
+                  <span class="pay-name">Chuyển khoản</span>
+                  <span class="pay-check">✓</span>
+                </label>
+                <label class="pay-method" data-method="counter">
+                  <input type="radio" name="payment" value="counter" hidden />
+                  <span class="pay-icon">🎫</span>
+                  <span class="pay-name">Tại quầy</span>
+                  <span class="pay-check">✓</span>
+                </label>
+              </div>
+
+              <!-- Final total -->
+              <div class="ck-total-box">
+                <div class="ck-total-row">
+                  <span>Vé phim</span>
+                  <span id="ck-seat-total">0 ₫</span>
+                </div>
+                <div class="ck-total-row">
+                  <span>Combo</span>
+                  <span id="ck-combo-total">0 ₫</span>
+                </div>
+                <div class="ck-total-row ck-grand">
+                  <span>Tổng thanh toán</span>
+                  <span class="val-gold" id="ck-grand-total">0 ₫</span>
+                </div>
+              </div>
+
+            </div>
+
           </div>
 
           <!-- Footer actions -->
@@ -1215,9 +1345,10 @@ function renderSeatModal(movie: Movie): string {
           <div class="success-title">Đặt vé thành công!</div>
           <p class="success-subtitle">
             Mã đặt vé của bạn đã được gửi qua email.<br/>
-            Vui lòng xuất trình mã khi đến rạp.
+            Vui lòng xuất trình mã này khi đến rạp.
           </p>
           <div class="booking-code" id="sm-booking-code">—</div>
+          <div class="success-info" id="success-info"></div>
           <br/>
           <button class="sm-btn-done" id="sm-btn-done">Xong</button>
         </div>
@@ -1318,7 +1449,9 @@ function attachModalListeners(movie: Movie) {
 
   // Back button
   document.getElementById('sm-btn-back')?.addEventListener('click', () => {
-    goToStep(1)
+    const step = seatState.currentStep
+    if (step === 2) goToStep(1)
+    else if (step === 3) goToStep(2)
   })
 
   // Confirm / Next button
@@ -1326,12 +1459,39 @@ function attachModalListeners(movie: Movie) {
     if (seatState.currentStep === 1) {
       goToStep(2)
     } else if (seatState.currentStep === 2) {
-      if (seatState.selectedSeats.length === 0) {
-        showToast('Vui lòng chọn ít nhất 1 ghế', 'error')
-        return
-      }
+      confirmBooking(movie)
+    } else if (seatState.currentStep === 3) {
       confirmBooking(movie)
     }
+  })
+
+  // Combo qty buttons (delegated)
+  document.getElementById('sm-step3-panel')?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.qty-btn') as HTMLButtonElement
+    if (!btn) return
+    const action = btn.dataset.action!
+    const comboId = btn.dataset.combo!
+    const current = seatState.selectedCombos[comboId] || 0
+    if (action === 'plus') {
+      seatState.selectedCombos[comboId] = Math.min(current + 1, 5)
+    } else {
+      seatState.selectedCombos[comboId] = Math.max(current - 1, 0)
+    }
+    const qtyEl = document.getElementById(`qty-${comboId}`)
+    if (qtyEl) qtyEl.textContent = String(seatState.selectedCombos[comboId])
+    updateCheckoutTotals()
+  })
+
+  // Payment method selection (delegated)
+  document.getElementById('sm-step3-panel')?.addEventListener('click', (e) => {
+    const label = (e.target as HTMLElement).closest('.pay-method') as HTMLElement
+    if (!label) return
+    const method = label.dataset.method!
+    seatState.paymentMethod = method
+    document.querySelectorAll('.pay-method').forEach(l => l.classList.remove('active'))
+    label.classList.add('active')
+    const radio = label.querySelector('input[type=radio]') as HTMLInputElement
+    if (radio) radio.checked = true
   })
 
   // Done button
@@ -1347,34 +1507,46 @@ function attachModalListeners(movie: Movie) {
   document.addEventListener('keydown', escHandler)
 }
 
-function goToStep(step: 1 | 2) {
+function goToStep(step: 1 | 2 | 3) {
   seatState.currentStep = step
   const step1Panel = document.getElementById('sm-step1-panel')!
   const step2Panel = document.getElementById('sm-step2-panel')!
-  const backBtn   = document.getElementById('sm-btn-back')  as HTMLButtonElement
+  const step3Panel = document.getElementById('sm-step3-panel')!
+  const backBtn    = document.getElementById('sm-btn-back')    as HTMLButtonElement
   const confirmBtn = document.getElementById('sm-btn-confirm') as HTMLButtonElement
 
   const s1 = document.getElementById('step-1')!
   const s2 = document.getElementById('step-2')!
   const s3 = document.getElementById('step-3')!
 
+  // Hide all panels
+  step1Panel.style.display = 'none'
+  step2Panel.style.display = 'none'
+  step3Panel.style.display = 'none'
+  backBtn.style.display = ''
+  confirmBtn.disabled = false
+
   if (step === 1) {
     step1Panel.style.display = ''
-    step2Panel.style.display = 'none'
     backBtn.style.display = 'none'
     confirmBtn.textContent = 'Tiếp theo →'
     s1.className = 'sm-step active'
     s2.className = 'sm-step'
     s3.className = 'sm-step'
-  } else {
-    step1Panel.style.display = 'none'
+  } else if (step === 2) {
     step2Panel.style.display = ''
-    backBtn.style.display = ''
-    confirmBtn.textContent = 'Xác nhận đặt vé'
+    confirmBtn.textContent = 'Tiếp theo →'
     confirmBtn.disabled = seatState.selectedSeats.length === 0
     s1.className = 'sm-step done'
     s2.className = 'sm-step active'
     s3.className = 'sm-step'
+  } else {
+    step3Panel.style.display = ''
+    confirmBtn.textContent = '💳 Xác nhận & Thanh toán'
+    s1.className = 'sm-step done'
+    s2.className = 'sm-step done'
+    s3.className = 'sm-step active'
+    populateCheckout()
   }
 }
 
@@ -1402,6 +1574,7 @@ function updateSummary(movie: Movie) {
     const type = (btn?.dataset.type || 'normal') as 'normal' | 'vip' | 'sweetbox'
     total += getSeatPrice(type)
   })
+  seatState.totalSeat = total   // store for checkout
 
   seatsEl.textContent = seats.length > 0 ? seats.join(', ') : 'Chưa chọn ghế'
   countEl.textContent = `${seats.length} ghế`
@@ -1412,28 +1585,110 @@ function updateSummary(movie: Movie) {
   if (confirmBtn) {
     confirmBtn.disabled = seats.length === 0
   }
-
-  // unused param guard
   void movie
 }
 
-function confirmBooking(_movie: Movie) {
-  const mainContent = document.getElementById('sm-main-content')!
-  const successEl   = document.getElementById('sm-success')!
-  const codeEl      = document.getElementById('sm-booking-code')!
-  const step3 = document.getElementById('step-3')!
+function confirmBooking(movie: Movie) {
+  if (seatState.currentStep === 2) {
+    if (seatState.selectedSeats.length === 0) {
+      showToast('Vui lòng chọn ít nhất 1 ghế', 'error'); return
+    }
+    goToStep(3)
+    return
+  }
+  // Step 3 → process payment
+  processPayment(movie)
+}
 
-  // Mark step 3 active
-  document.getElementById('step-2')!.className = 'sm-step done'
-  step3.className = 'sm-step active'
+function populateCheckout() {
+  const titleEl    = document.getElementById('ck-movie-title')
+  const timeEl     = document.getElementById('ck-showtime')
+  const seatsEl    = document.getElementById('ck-seats')
+  const seatTotEl  = document.getElementById('ck-seat-total')
+  const grandTotEl = document.getElementById('ck-grand-total')
+  const comboTotEl = document.getElementById('ck-combo-total')
 
-  // Generate random booking code
-  const code = 'CB' + Math.random().toString(36).substring(2, 8).toUpperCase()
-  codeEl.textContent = code
+  const movie = nowShowingMovies.find(m => m.id === seatState.movieId)
+  if (titleEl) titleEl.textContent = movie?.title || '—'
 
-  mainContent.style.display = 'none'
-  successEl.classList.add('show')
-  showToast('🎟️ Đặt vé thành công!', 'success')
+  const activeTime = document.querySelector('.sm-time-btn.active')
+  const timeType = activeTime?.querySelector('.time-type')?.textContent || ''
+  if (timeEl) timeEl.textContent = `${seatState.selectedDate} – ${seatState.selectedTime} (${timeType})`
+  if (seatsEl) seatsEl.textContent = seatState.selectedSeats.join(', ')
+
+  if (seatTotEl) seatTotEl.textContent = seatState.totalSeat.toLocaleString('vi-VN') + ' ₫'
+  const comboTotal = calcComboTotal()
+  if (comboTotEl) comboTotEl.textContent = comboTotal > 0 ? comboTotal.toLocaleString('vi-VN') + ' ₫' : '0 ₫'
+  if (grandTotEl) grandTotEl.textContent = (seatState.totalSeat + comboTotal).toLocaleString('vi-VN') + ' ₫'
+}
+
+function calcComboTotal(): number {
+  const prices: Record<string, number> = { c1: 65000, c2: 120000, c3: 85000 }
+  return Object.entries(seatState.selectedCombos)
+    .reduce((sum, [id, qty]) => sum + (prices[id] || 0) * qty, 0)
+}
+
+function updateCheckoutTotals() {
+  const comboTotal = calcComboTotal()
+  const grand = seatState.totalSeat + comboTotal
+  const comboEl = document.getElementById('ck-combo-total')
+  const grandEl = document.getElementById('ck-grand-total')
+  if (comboEl) comboEl.textContent = comboTotal > 0 ? comboTotal.toLocaleString('vi-VN') + ' ₫' : '0 ₫'
+  if (grandEl) grandEl.textContent = grand.toLocaleString('vi-VN') + ' ₫'
+}
+
+function processPayment(_movie: Movie) {
+  const nameEl  = document.getElementById('ck-name')  as HTMLInputElement
+  const phoneEl = document.getElementById('ck-phone') as HTMLInputElement
+
+  if (!nameEl?.value.trim()) {
+    showToast('Vui lòng nhập họ tên', 'error'); nameEl?.focus(); return
+  }
+  if (!phoneEl?.value.trim()) {
+    showToast('Vui lòng nhập số điện thoại', 'error'); phoneEl?.focus(); return
+  }
+  const phoneRe = /^[0-9]{9,11}$/
+  if (!phoneRe.test(phoneEl.value.replace(/\s/g, ''))) {
+    showToast('Số điện thoại không hợp lệ', 'error'); phoneEl?.focus(); return
+  }
+
+  const confirmBtn = document.getElementById('sm-btn-confirm') as HTMLButtonElement
+  confirmBtn.disabled = true
+  confirmBtn.textContent = '⏳ Đang xử lý...'
+
+  // Simulate payment processing
+  setTimeout(() => {
+    const mainContent = document.getElementById('sm-main-content')!
+    const successEl   = document.getElementById('sm-success')!
+    const codeEl      = document.getElementById('sm-booking-code')!
+    const infoEl      = document.getElementById('success-info')
+
+    document.getElementById('step-3')!.className = 'sm-step done'
+
+    const code = 'CB' + Math.random().toString(36).substring(2, 8).toUpperCase()
+    codeEl.textContent = code
+
+    const payLabel: Record<string, string> = {
+      momo: 'MoMo', vnpay: 'VNPay', banking: 'Chuyển khoản', counter: 'Tại quầy'
+    }
+    const grand = seatState.totalSeat + calcComboTotal()
+
+    if (infoEl) {
+      infoEl.innerHTML = `
+        <div class="success-detail-grid">
+          <div class="sd-row"><span>Khách hàng</span><b>${nameEl.value.trim()}</b></div>
+          <div class="sd-row"><span>Ghế</span><b>${seatState.selectedSeats.join(', ')}</b></div>
+          <div class="sd-row"><span>Lịch chiếu</span><b>${seatState.selectedTime} – ${seatState.selectedDate}</b></div>
+          <div class="sd-row"><span>Thanh toán</span><b>${payLabel[seatState.paymentMethod]}</b></div>
+          <div class="sd-row total"><span>Tổng</span><b>${grand.toLocaleString('vi-VN')} ₫</b></div>
+        </div>
+      `
+    }
+
+    mainContent.style.display = 'none'
+    successEl.classList.add('show')
+    showToast('🎟️ Đặt vé thành công!', 'success')
+  }, 1200)
 }
 
 // ---- Patch handleBooking to open the seat modal ----
