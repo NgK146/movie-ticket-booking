@@ -1,5 +1,6 @@
 import './style.css'
 import { renderQRToCanvas, downloadQR, type TicketData } from './qr.service'
+import { renderAdminDashboard } from './admin'
 
 // =========================================
 // DATA: Phim Đang Chiếu
@@ -506,6 +507,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <li><a href="#promotions">Khuyến Mãi</a></li>
         <li><a href="#members">Thành Viên</a></li>
         <li><a href="#history" id="nav-history-btn">Lịch Sử</a></li>
+        <li><a href="#admin" id="nav-admin-btn" style="color: #fbd38d;">Quản Lý</a></li>
       </ul>
 
       <div class="navbar-right">
@@ -1892,9 +1894,36 @@ function processPayment(_movie: Movie) {
 }
 
 // ---- Patch handleBooking to open the seat modal ----
-window.handleBooking = (movieId: number) => {
-  openSeatModal(movieId)
+// ---- Admin Dashboard Integration ----
+function openAdminDashboard() {
+  const app = document.getElementById('app')!
+  const container = document.createElement('div')
+  container.id = 'admin-root'
+  document.body.appendChild(container)
+  app.style.display = 'none'
+
+  renderAdminDashboard(container, () => {
+    app.style.display = ''
+    container.remove()
+    window.location.hash = '#'
+  })
 }
+
+window.addEventListener('hashchange', () => {
+  if (window.location.hash === '#admin') {
+    openAdminDashboard()
+  }
+})
+
+// Check initial hash
+if (window.location.hash === '#admin') {
+  setTimeout(openAdminDashboard, 500)
+}
+
+document.getElementById('nav-admin-btn')?.addEventListener('click', (e) => {
+  e.preventDefault()
+  window.location.hash = '#admin'
+})
 
 // ---- Booking History Modal ----
 function renderHistoryModal(): string {
