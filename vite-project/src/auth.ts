@@ -1,3 +1,5 @@
+import { api } from './api';
+
 export function renderLogin(container: HTMLElement, onLogin: () => void, onSwitchToRegister: () => void, onBack: () => void) {
   container.innerHTML = `
     <div class="auth-container">
@@ -31,10 +33,25 @@ export function renderLogin(container: HTMLElement, onLogin: () => void, onSwitc
   document.getElementById('back-home')?.addEventListener('click', onBack);
   document.getElementById('switch-to-register')?.addEventListener('click', onSwitchToRegister);
   
-  document.getElementById('login-form')?.addEventListener('submit', (e) => {
+  document.getElementById('login-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    alert('Login successful! (Demo)');
-    onLogin();
+    // const email = (document.getElementById('email') as HTMLInputElement).value;
+    // const password = (document.getElementById('password') as HTMLInputElement).value;
+
+    try {
+      // --- Simple Login Call ---
+      // const response = await api.post('/auth/login', { email, password });
+      // const { accessToken, refreshToken } = response.data;
+
+      // Mocking token storage for now
+      localStorage.setItem('accessToken', 'mock_access_token');
+      localStorage.setItem('refreshToken', 'mock_refresh_token');
+      
+      alert('Login successful! Tokens stored.');
+      onLogin();
+    } catch (err) {
+      alert('Login failed: ' + (err as Error).message);
+    }
   });
 }
 
@@ -75,9 +92,20 @@ export function renderRegister(container: HTMLElement, onRegister: () => void, o
   document.getElementById('back-home')?.addEventListener('click', onBack);
   document.getElementById('switch-to-login')?.addEventListener('click', onSwitchToLogin);
   
-  document.getElementById('register-form')?.addEventListener('submit', (e) => {
+  document.getElementById('register-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    alert('Registration successful! (Demo)');
-    onRegister();
+    // const name = (document.getElementById('reg-name') as HTMLInputElement).value;
+    // const email = (document.getElementById('reg-email') as HTMLInputElement).value;
+    // const password = (document.getElementById('reg-password') as HTMLInputElement).value;
+
+    try {
+      // --- Simple Register Call ---
+      // await api.post('/auth/register', { name, email, password });
+      
+      alert('Registration successful! Please login.');
+      onRegister();
+    } catch (err) {
+      alert('Registration failed: ' + (err as Error).message);
+    }
   });
 }

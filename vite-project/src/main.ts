@@ -4,12 +4,21 @@ import viteLogo from './assets/vite.svg'
 import heroImg from './assets/hero.png'
 import { setupCounter } from './counter.ts'
 import { renderLogin, renderRegister } from './auth.ts'
+import { logout } from './api.ts'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
 function renderHome() {
+  const isLoggedIn = !!localStorage.getItem('accessToken');
+
   app.innerHTML = `
-    <button id="nav-login-btn" class="nav-login-btn">Login / Sign Up</button>
+    ${isLoggedIn ? 
+      `<div class="nav-user-info">
+        <span>Logged in with Token</span>
+        <button id="logout-btn" class="nav-login-btn">Logout</button>
+       </div>` : 
+      `<button id="nav-login-btn" class="nav-login-btn">Login / Sign Up</button>`
+    }
     <section id="center">
       <div class="hero">
         <img src="${heroImg}" class="base" width="170" height="179">
@@ -19,6 +28,12 @@ function renderHome() {
       <div>
         <h1>Movie Ticket Booking</h1>
         <p>Book your favorite movies in seconds. Experience cinema like never before.</p>
+        ${isLoggedIn ? 
+          `<p style="margin-top: 20px; font-size: 14px; opacity: 0.7;">
+            Access Token: <code>${localStorage.getItem('accessToken')?.substring(0, 15)}...</code><br>
+            Refresh Token: <code>${localStorage.getItem('refreshToken')?.substring(0, 15)}...</code>
+          </p>` : ''
+        }
       </div>
       <button id="counter" type="button" class="counter"></button>
     </section>
@@ -66,6 +81,10 @@ function renderHome() {
   
   document.getElementById('nav-login-btn')?.addEventListener('click', () => {
     showLogin();
+  });
+
+  document.getElementById('logout-btn')?.addEventListener('click', () => {
+    logout();
   });
 }
 
