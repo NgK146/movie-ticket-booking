@@ -3,7 +3,7 @@ import typescriptLogo from './assets/typescript.svg'
 import viteLogo from './assets/vite.svg'
 import heroImg from './assets/hero.png'
 import { setupCounter } from './counter.ts'
-import { renderLogin, renderRegister } from './auth.ts'
+import { renderLogin, renderRegister, renderForgotPassword, renderResetPassword } from './auth.ts'
 import { logout } from './api.ts'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -93,7 +93,24 @@ function showLogin() {
     app, 
     () => renderHome(), // On success
     () => showRegister(), // Switch to register
+    () => showForgotPassword(), // Forgot password
     () => renderHome() // Back button
+  );
+}
+
+function showForgotPassword() {
+  renderForgotPassword(
+    app,
+    () => showResetPassword(), // Next step
+    () => showLogin() // Back to login
+  );
+}
+
+function showResetPassword() {
+  renderResetPassword(
+    app,
+    () => showLogin(), // After reset succeeds
+    () => showLogin() // Back to login
   );
 }
 

@@ -282,6 +282,20 @@ code {
 }
 
 /* Auth Styles */
+.auth-link-sm {
+  font-size: 13px;
+  color: var(--gold);
+  text-decoration: none;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.3s ease;
+}
+
+.auth-link-sm:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
 .auth-container {
   display: flex;
   justify-content: center;
