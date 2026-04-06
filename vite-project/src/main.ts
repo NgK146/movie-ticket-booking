@@ -837,10 +837,7 @@ window.showToast = showToast
 
 // Booking handler
 window.handleBooking = (movieId: number) => {
-  const movie = nowShowingMovies.find(m => m.id === movieId) ||
-                nowShowingMovies.find(m => m.id === movieId)
-  const title = movie?.title || 'phim này'
-  showToast(`🎟️ Đang mở trang đặt vé cho "${title}"...`, 'success')
+  openSeatModal(movieId)
 }
 
 // Trailer handler
@@ -1048,27 +1045,49 @@ const SEAT_PRICES: Record<string, number> = {
   sweetbox: 200000,  // per couple seat (2 people)
 }
 
-// Generate seat layout: 8 rows (A-H), 12 cols, with some taken seats
-function generateSeatMap(): { row: string; col: number; type: 'normal' | 'vip' | 'sweetbox'; taken: boolean }[][] {
+// ---- Real-time occupancy helpers ----
+function getOccupancyKey(movieId: number, date: string, time: string): string {
+  return `cine_occupied_${movieId}_${date.replace(/\//g, '-')}_${time.replace(/:/g, '-')}`
+}
+
+function getOccupiedSeats(movieId: number, date: string, time: string): string[] {
+  const key = getOccupancyKey(movieId, date, time)
+  const data = localStorage.getItem(key)
+  return data ? JSON.parse(data) : []
+}
+
+function saveOccupiedSeats(movieId: number, date: string, time: string, seats: string[]) {
+  const key = getOccupancyKey(movieId, date, time)
+  const current = getOccupiedSeats(movieId, date, time)
+  const updated = Array.from(new Set([...current, ...seats]))
+  localStorage.setItem(key, JSON.stringify(updated))
+  
+  // Trigger a custom event to notify other parts of the app if needed
+  window.dispatchEvent(new CustomEvent('seatsUpdated', { detail: { movieId, date, time } }))
+}
+
+// Generate seat layout: 8 rows (A-H), 12 cols, with dynamic occupancy
+function generateSeatMap(movieId: number, date: string, time: string): { row: string; col: number; type: 'normal' | 'vip' | 'sweetbox'; taken: boolean }[][] {
   const rows = ['A','B','C','D','E','F','G','H']
-  // VIP rows are E, F. Sweetbox is row H (6 couple seats)
-  const takenSeeds = [
-    'A3','A4','B7','B8','C2','C9','D5','D6','E1','E10',
-    'F3','F4','F9','G2','G7','G8','H1','H3','H5',
-  ]
+  const occupied = getOccupiedSeats(movieId, date, time)
+  
+  // Initial hardcoded taken seats (if any) as a baseline for new showtimes
+  const baselineTaken = (movieId === 1) ? ['A3','A4','B7','B8','C2','C9'] : []
+  const allTaken = Array.from(new Set([...baselineTaken, ...occupied]))
+
   return rows.map(row => {
     if (row === 'H') {
       // Sweetbox row: 6 couple seats
       return Array.from({ length: 6 }, (_, i) => ({
         row, col: i + 1,
         type: 'sweetbox' as const,
-        taken: takenSeeds.includes(`${row}${i + 1}`)
+        taken: allTaken.includes(`${row}${i + 1}`)
       }))
     }
     return Array.from({ length: 12 }, (_, i) => {
       const col = i + 1
       const type: 'normal' | 'vip' = (row === 'E' || row === 'F') ? 'vip' : 'normal'
-      return { row, col, type, taken: takenSeeds.includes(`${row}${col}`) }
+      return { row, col, type, taken: allTaken.includes(`${row}${col}`) }
     })
   })
 }
@@ -1082,7 +1101,7 @@ function getSeatPrice(type: 'normal' | 'vip' | 'sweetbox'): number {
 }
 
 function renderSeatMapHTML(): string {
-  const map = generateSeatMap()
+  const map = generateSeatMap(seatState.movieId, seatState.selectedDate, seatState.selectedTime)
   return map.map(rowSeats => {
     const rowLabel = rowSeats[0].row
     const isSweetbox = rowSeats[0].type === 'sweetbox'
@@ -1113,6 +1132,73 @@ function renderSeatMapHTML(): string {
     </div>`
   }).join('')
 }
+
+function refreshSeatMap() {
+  const mapEl = document.getElementById('sm-seat-map')
+  if (!mapEl) return
+  
+  // Save current selection (visually)
+  const currentSelection = seatState.selectedSeats
+  
+  mapEl.innerHTML = renderSeatMapHTML()
+  
+  // Restore selection (visually)
+  currentSelection.forEach(id => {
+    const seatBtn = mapEl.querySelector(`[data-seat="${id}"]`)
+    if (seatBtn && !seatBtn.classList.contains('taken')) {
+      seatBtn.classList.add('selected')
+    } else if (seatBtn && seatBtn.classList.contains('taken')) {
+      // If a seat became taken while it was selected, remove from state
+      seatState.selectedSeats = seatState.selectedSeats.filter(s => s !== id)
+    }
+  })
+  
+  // If we are on step 2, update summary
+  if (seatState.currentStep === 2) {
+    const movie = nowShowingMovies.find(m => m.id === seatState.movieId)
+    if (movie) updateSummary(movie)
+  }
+}
+
+let seatSimulationInterval: number | null = null
+
+function startSeatSimulation() {
+  if (seatSimulationInterval) return
+  seatSimulationInterval = window.setInterval(() => {
+    // 30% chance to simulate a booking every 8 seconds
+    if (Math.random() < 0.3) {
+      const rows = ['A','B','C','D','E','F','G'] // exclude H for simplicity
+      const row = rows[Math.floor(Math.random() * rows.length)]
+      const col = Math.floor(Math.random() * 12) + 1
+      const seatId = `${row}${col}`
+      
+      const occupied = getOccupiedSeats(seatState.movieId, seatState.selectedDate, seatState.selectedTime)
+      if (!occupied.includes(seatId) && !seatState.selectedSeats.includes(seatId)) {
+        saveOccupiedSeats(seatState.movieId, seatState.selectedDate, seatState.selectedTime, [seatId])
+        showToast('🔄 Có người vừa đặt ghế ' + seatId, 'info')
+      }
+    }
+  }, 8000)
+}
+
+function stopSeatSimulation() {
+  if (seatSimulationInterval) {
+    clearInterval(seatSimulationInterval)
+    seatSimulationInterval = null
+  }
+}
+
+// Cross-tab sync
+window.addEventListener('storage', (e) => {
+  if (e.key && e.key.startsWith('cine_occupied_')) {
+    refreshSeatMap()
+  }
+})
+
+// Listen for our own updates (same tab)
+window.addEventListener('seatsUpdated', () => {
+  refreshSeatMap()
+})
 
 // Build dates (today + 6 days)
 function buildDates(): { day: string; num: string; month: string; full: string }[] {
@@ -1464,12 +1550,14 @@ function openSeatModal(movieId: number) {
   })
 
   attachModalListeners(movie)
+  startSeatSimulation()
 }
 
 function closeSeatModal() {
   const backdrop = document.getElementById('seat-modal-backdrop')
   if (!backdrop) return
   backdrop.classList.remove('active')
+  stopSeatSimulation()
   setTimeout(() => backdrop.remove(), 350)
 }
 
@@ -1889,6 +1977,9 @@ function processPayment(_movie: Movie) {
     // Save to history
     if (currentTicket) {
       saveBooking(currentTicket)
+      
+      // PERSIST SEATS FOR REAL-TIME
+      saveOccupiedSeats(seatState.movieId, seatState.selectedDate, seatState.selectedTime, seatState.selectedSeats)
     }
   }, 1200)
 }
