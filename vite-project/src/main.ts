@@ -1621,6 +1621,9 @@ function renderSeatModal(movie: Movie): string {
               </div>
               <div class="coupon-feedback" id="coupon-feedback" style="display:none"></div>
 
+              <!-- Points Redemption -->
+              <div id="points-redemption-section" style="margin-top: 18px;"></div>
+
               <!-- Final total -->
               <div class="ck-total-box">
                 <div class="ck-total-row">
@@ -1643,6 +1646,27 @@ function renderSeatModal(movie: Movie): string {
 
             </div>
 
+          </div>
+
+          <!-- Processing State -->
+          <div class="sm-processing" id="sm-processing">
+            <div class="proc-spinner"></div>
+            <h3 class="proc-title">Đang xử lý giao dịch</h3>
+            <p class="proc-msg">Hệ thống đang kết nối an toàn tới cổng thanh toán...</p>
+            <div class="proc-steps">
+               <div class="proc-step active" id="p-step-1">
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                 Khởi tạo phiên thanh toán
+               </div>
+               <div class="proc-step" id="p-step-2">
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+                 Xác thực với ngân hàng
+               </div>
+               <div class="proc-step" id="p-step-3">
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+                 Xuất mã vé điện tử
+               </div>
+            </div>
           </div>
 
           <!-- Footer actions -->
@@ -1969,6 +1993,8 @@ function populateCheckout() {
   if (comboTotEl) comboTotEl.textContent = comboTotal > 0 ? comboTotal.toLocaleString('vi-VN') + ' ₫' : '0 ₫'
   if (grandTotEl) grandTotEl.textContent = (seatState.totalSeat + comboTotal).toLocaleString('vi-VN') + ' ₫'
 
+  renderPointsRedemption();
+
   // AUTO-FILL USER INFO
   const user = Auth.getCurrentUser()
   if (user) {
@@ -1979,6 +2005,37 @@ function populateCheckout() {
     if (phoneInput && !phoneInput.value) phoneInput.value = user.phone
     if (emailInput && !emailInput.value) emailInput.value = user.email
   }
+}
+
+function renderPointsRedemption() {
+  const container = document.getElementById('points-redemption-section');
+  if (!container) return;
+
+  const user = Auth.getCurrentUser();
+  if (!user || user.points <= 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  // 1 point = 1,000 VND
+  const pointValue = user.points * 1000;
+
+  container.innerHTML = `
+    <div class="points-redeem-box">
+      <div class="pr-info">
+        <span class="pr-title">Sử dụng điểm thưởng</span>
+        <span class="pr-sub">Bạn có <b>${user.points} điểm</b> (≈ ${pointValue.toLocaleString('vi-VN')} ₫)</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="use-points-toggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+  `;
+
+  document.getElementById('use-points-toggle')?.addEventListener('change', () => {
+    updateCheckoutTotals();
+  });
 }
 
 function calcComboTotal(): number {
@@ -2044,10 +2101,17 @@ function applyDiscount() {
 }
 
 function updateCheckoutTotals() {
+  const user          = Auth.getCurrentUser();
   const comboTotal    = calcComboTotal()
   const subtotal      = seatState.totalSeat + comboTotal
   const discountOff   = calcDiscount(subtotal)
-  const grand         = Math.max(0, subtotal - discountOff)
+  
+  // Points calculation
+  const pointsToggle  = document.getElementById('use-points-toggle') as HTMLInputElement;
+  const pointsUsed    = (pointsToggle?.checked && user) ? user.points : 0;
+  const pointsValue   = pointsUsed * 1000;
+
+  const grand         = Math.max(0, subtotal - discountOff - pointsValue)
 
   const comboEl    = document.getElementById('ck-combo-total')
   const grandEl    = document.getElementById('ck-grand-total')
@@ -2084,99 +2148,109 @@ function processPayment(_movie: Movie) {
     showToast('Số điện thoại không hợp lệ', 'error'); phoneEl?.focus(); return
   }
 
-  const confirmBtn = document.getElementById('sm-btn-confirm') as HTMLButtonElement
+  const selectedPayment = (document.querySelector('input[name="payment"]:checked') as HTMLInputElement)?.value || 'momo'
+  const comboTotal = calcComboTotal()
+  const subtotal = seatState.totalSeat + comboTotal
+  const discountOff = calcDiscount(subtotal)
+  
+  const user = Auth.getCurrentUser();
+  const pointsToggle = document.getElementById('use-points-toggle') as HTMLInputElement;
+  const pointsUsed = (pointsToggle?.checked && user) ? user.points : 0;
+  
+  const finalTotal = Math.max(0, subtotal - discountOff - (pointsUsed * 1000));
+
+  currentTicket = {
+    bookingCode: 'CB' + Math.random().toString(36).substr(2, 6).toUpperCase(),
+    movieTitle: _movie.title,
+    cinema: 'CineBooking Vincom',
+    date: seatState.selectedDate,
+    time: seatState.selectedTime,
+    seats: seatState.selectedSeats,
+    customerName: nameEl.value.trim(),
+    phone: phoneEl.value.trim(),
+    totalAmount: finalTotal,
+    paymentMethod: selectedPayment.toUpperCase(),
+    selectedCombos: { ...seatState.selectedCombos },
+    comboTotal: comboTotal,
+    discountCode: seatState.discountCode,
+    pointsUsed: pointsUsed
+  }
+
+  // Show processing state
+  const mainContent = document.getElementById('sm-main-content')!
+  const processing  = document.getElementById('sm-processing')!
+  const successEl   = document.getElementById('sm-success')!
+  const confirmBtn  = document.getElementById('sm-btn-confirm') as HTMLButtonElement
+  
   confirmBtn.disabled = true
-  confirmBtn.textContent = '⏳ Đang xử lý...'
+  mainContent.style.display = 'none'
+  processing.classList.add('show')
 
-  // Simulate payment processing
+  // Sequence steps animation
+  setTimeout(() => { 
+    const step2 = document.getElementById('p-step-2')
+    if (step2) {
+      step2.classList.add('active');
+      step2.querySelector('circle')?.remove();
+      step2.insertAdjacentHTML('afterbegin', '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>');
+    }
+  }, 700)
+  
+  setTimeout(() => { 
+    const step3 = document.getElementById('p-step-3')
+    if (step3) {
+      step3.classList.add('active');
+      step3.querySelector('circle')?.remove();
+      step3.insertAdjacentHTML('afterbegin', '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>');
+    }
+  }, 1400)
+
+  // Finalize after 2.2s
   setTimeout(() => {
-    const mainContent = document.getElementById('sm-main-content')!
-    const successEl   = document.getElementById('sm-success')!
-    const codeEl      = document.getElementById('sm-booking-code')!
-    const infoEl      = document.getElementById('success-info')
-
-    document.getElementById('step-3')!.className = 'sm-step done'
-
-    const code = 'CB' + Math.random().toString(36).substring(2, 8).toUpperCase()
-    codeEl.textContent = code
-
-    const payLabel: Record<string, string> = {
-      momo: 'MoMo', vnpay: 'VNPay', banking: 'Chuyển khoản', counter: 'Tại quầy'
-    }
-    const subtotal    = seatState.totalSeat + calcComboTotal()
-    const discountOff = calcDiscount(subtotal)
-    const grand       = Math.max(0, subtotal - discountOff)
-
-    const comboTotal  = calcComboTotal()
+    saveBooking(currentTicket!)
     
-    // Generate ticket data
-    currentTicket = {
-      bookingCode: code,
-      movieTitle: _movie.title,
-      cinema: 'CGV Vincom Center Bà Triệu', 
-      date: seatState.selectedDate,
-      time: seatState.selectedTime,
-      seats: seatState.selectedSeats,
-      customerName: nameEl.value.trim(),
-      phone: phoneEl.value.trim(),
-      totalAmount: grand,
-      paymentMethod: payLabel[seatState.paymentMethod],
-      selectedCombos: { ...seatState.selectedCombos },
-      comboTotal: comboTotal,
-      ...(seatState.discountCode ? { discountCode: seatState.discountCode } : {})
+    // Update user points and spending
+    if (user) {
+      user.points = (user.points || 0) - pointsUsed + Math.floor(finalTotal / 10000);
+      user.totalSpent = (user.totalSpent || 0) + finalTotal;
+      
+      // Update tier logic
+      if (user.totalSpent >= 5000000) user.tier = 'Gold';
+      else if (user.totalSpent >= 1000000) user.tier = 'Silver';
+      
+      Auth.setCurrentUser(user);
+      refreshNavbar();
     }
 
-    // Render QR Code to the canvas
-    const canvas = document.getElementById('sm-qr-canvas') as HTMLCanvasElement
-    if (canvas && currentTicket) {
-      renderQRToCanvas(canvas, currentTicket).catch(err => {
-        console.error('QR rendering failed:', err)
-      })
-    }
-
+    // Display ticket success
+    const codeEl = document.getElementById('sm-booking-code')!
+    const infoEl = document.getElementById('success-info')
+    
+    codeEl.textContent = currentTicket!.bookingCode
     if (infoEl) {
-      const comboRow = comboTotal > 0
-        ? `<div class="sd-row"><span>Đồ ăn & Uống</span><b>${comboTotal.toLocaleString('vi-VN')} ₫</b></div>`
-        : ''
-      const discountRow = discountOff > 0
-        ? `<div class="sd-row"><span>Giảm giá (${seatState.discountCode})</span><b style="color:#10b981">− ${discountOff.toLocaleString('vi-VN')} ₫</b></div>`
-        : ''
       infoEl.innerHTML = `
         <div class="success-detail-grid">
-          <div class="sd-row"><span>Khách hàng</span><b>${nameEl.value.trim()}</b></div>
-          <div class="sd-row"><span>Ghế</span><b>${seatState.selectedSeats.join(', ')}</b></div>
-          <div class="sd-row"><span>Lịch chiếu</span><b>${seatState.selectedTime} – ${seatState.selectedDate}</b></div>
-          ${comboRow}
-          <div class="sd-row"><span>Thanh toán</span><b>${payLabel[seatState.paymentMethod]}</b></div>
-          ${discountRow}
-          <div class="sd-row total"><span>Tổng cộng</span><b>${grand.toLocaleString('vi-VN')} ₫</b></div>
+          <div class="sd-row"><span>Khách hàng</span><b>${currentTicket!.customerName}</b></div>
+          <div class="sd-row"><span>Mã đặt vé</span><b style="color: #ff3d5a;">${currentTicket!.bookingCode}</b></div>
+          <div class="sd-row"><span>Lịch chiếu</span><b>${currentTicket!.time} – ${currentTicket!.date}</b></div>
+          <div class="sd-row"><span>Ghế</span><b>${currentTicket!.seats.join(', ')}</b></div>
+          <div class="sd-row"><span>Thanh toán</span><b>${currentTicket!.paymentMethod}</b></div>
+          ${pointsUsed > 0 ? `<div class="sd-row"><span>Điểm đã dùng</span><b style="color: #10b981;">-${(pointsUsed * 1000).toLocaleString('vi-VN')} ₫</b></div>` : ''}
+          <div class="sd-row total"><span>Tổng thanh toán</span><b>${currentTicket!.totalAmount.toLocaleString('vi-VN')} ₫</b></div>
         </div>
       `
     }
 
-    mainContent.style.display = 'none'
-    successEl.classList.add('show')
-    showToast('🎟️ Đặt vé thành công!', 'success')
-    stopBookingTimer()
+    const canvas = document.getElementById('sm-qr-canvas') as HTMLCanvasElement
+    if (canvas) renderQRToCanvas(canvas, currentTicket!)
 
-    // Save to history
-    if (currentTicket) {
-      saveBooking(currentTicket)
-      
-      // PERSIST SEATS FOR REAL-TIME
-      saveOccupiedSeats(seatState.movieId, seatState.selectedDate, seatState.selectedTime, seatState.selectedSeats)
-      
-      // UPDATE MEMBERSHIP IF LOGGED IN
-      const user = Auth.getCurrentUser()
-      if (user) {
-        Auth.updateMembership(grand)
-        refreshNavbar()
-      }
-    }
-  }, 1200)
+    processing.classList.remove('show')
+    successEl.classList.add('show')
+    showToast('🎉 Chúc mừng! Bạn đã đặt vé thành công.', 'success')
+    stopBookingTimer();
+  }, 2200)
 }
 
-// ---- Patch handleBooking to open the seat modal ----
 // ---- Admin Dashboard Integration ----
 function openAdminDashboard() {
   const app = document.getElementById('app')!
