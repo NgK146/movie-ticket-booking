@@ -2881,6 +2881,151 @@ body {
 }
 
 /* =========================================
+   MEMBERSHIP TIERS SECTION (HOME)
+   ========================================= */
+.members-section {
+  padding: 80px 0;
+  background: radial-gradient(circle at top right, rgba(124, 58, 237, 0.05), transparent 40%),
+              radial-gradient(circle at bottom left, rgba(236, 201, 75, 0.03), transparent 40%);
+}
+
+.tier-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 30px;
+  margin-top: 40px;
+}
+
+.tier-p-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 24px;
+  padding: 40px 30px;
+  text-align: center;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tier-p-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-10px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+}
+
+.tier-p-card.active {
+  border-color: #ff3d5a;
+  background: rgba(255, 61, 90, 0.03);
+}
+
+.tier-icon-wrap {
+  width: 70px;
+  height: 70px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  margin-bottom: 24px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tier-p-card.silver .tier-icon-wrap { background: linear-gradient(135deg, rgba(160, 174, 192, 0.2), rgba(113, 128, 150, 0.2)); color: #a0aec0; }
+.tier-p-card.gold .tier-icon-wrap   { background: linear-gradient(135deg, rgba(236, 201, 75, 0.2), rgba(214, 158, 46, 0.2)); color: #ecc94b; }
+
+.tier-p-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 8px;
+  font-family: 'Outfit', sans-serif;
+}
+
+.tier-p-req {
+  font-size: 13px;
+  color: #94a3b8;
+  margin-bottom: 24px;
+}
+
+.tier-benefits {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  text-align: left;
+}
+
+.tier-benefit-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #cbd5e1;
+  margin-bottom: 12px;
+}
+
+.tier-benefit-item svg {
+  color: #10b981;
+  flex-shrink: 0;
+}
+
+.current-rank-badge {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: #ff3d5a;
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+}
+
+.user-progress-panel {
+  margin-top: 50px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 20px;
+  padding: 30px;
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  animation: fadeIn 0.8s ease-out;
+}
+
+.up-info {
+  flex: 1;
+}
+
+.up-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.up-sub {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.up-progress-box {
+  flex: 2;
+}
+
+@media (max-width: 768px) {
+  .user-progress-panel {
+    flex-direction: column;
+    text-align: center;
+    gap: 20px;
+  }
+}
+
+/* =========================================
    USER PROFILE MODAL
    ========================================= */
 .profile-modal {
