@@ -1,9 +1,32 @@
 import './style.css'
 import { renderQRToCanvas, downloadQR, type TicketData } from './qr.service'
+import { renderAdminDashboard } from './admin'
+import * as Auth from './auth'
 
 // =========================================
-// DATA: Phim Đang Chiếu
+// UI HELPERS
 // =========================================
+export function showToast(message: string, type: 'success' | 'error' | 'info' = 'success') {
+  const container = document.getElementById('toast-container')
+  if (!container) return
+
+  const toast = document.createElement('div')
+  toast.className = `toast ${type}`
+  toast.innerHTML = `
+    <div class="toast-icon">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</div>
+    <div class="toast-content">${message}</div>
+    <button class="toast-close">✕</button>
+  `
+  container.appendChild(toast)
+
+  const remove = () => {
+    toast.classList.add('out')
+    setTimeout(() => toast.remove(), 400)
+  }
+
+  toast.querySelector('.toast-close')?.addEventListener('click', remove)
+  setTimeout(remove, 4500)
+}
 interface Movie {
   id: number
   title: string
@@ -505,6 +528,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <li><a href="#cinemas">Cụm Rạp</a></li>
         <li><a href="#promotions">Khuyến Mãi</a></li>
         <li><a href="#members">Thành Viên</a></li>
+        <li><a href="#history" id="nav-history-btn">Lịch Sử</a></li>
+        <li><a href="#admin" id="nav-admin-btn" style="color: #fbd38d;">Quản Lý</a></li>
       </ul>
 
       <div class="navbar-right">
@@ -514,12 +539,26 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           </svg>
           <span class="search-text">Tìm phim...</span>
         </button>
-        <a href="#auth" class="btn-primary">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-          </svg>
-          Đăng Nhập
-        </a>
+        
+        ${Auth.getCurrentUser() ? `
+          <div class="user-profile-nav" id="nav-user-profile">
+            <div class="user-avatar-sm">
+              <img src="${Auth.getCurrentUser()?.avatar || 'https://i.pravatar.cc/100'}" alt="Avatar">
+            </div>
+            <div class="user-nav-info">
+              <span class="user-nav-name">${Auth.getCurrentUser()?.name.split(' ')[0]}</span>
+              <span class="user-nav-tier" style="color: ${Auth.getTierBadgeColor(Auth.getCurrentUser()!.tier)}">${Auth.getCurrentUser()?.tier}</span>
+            </div>
+          </div>
+        ` : `
+          <a href="#auth" class="btn-primary" id="nav-login-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+            Đăng Nhập
+          </a>
+        `}
+        
         <button class="hamburger" id="hamburger-btn" aria-label="Mở menu">
           <span></span><span></span><span></span>
         </button>
@@ -803,39 +842,18 @@ declare global {
     filterGenre: (genre: string, btn: HTMLElement) => void
     filterCinema: (cinema: string, btn: HTMLElement) => void
     showToast: (message: string, type: 'success' | 'error' | 'info') => void
+    closeHistoryModal: () => void
+    viewTicketFromHistory: (index: number) => void
   }
 }
 
-// Toast notifications
-function showToast(message: string, type: 'success' | 'error' | 'info' = 'success') {
-  const container = document.getElementById('toast-container')!
-  const icons: Record<string, string> = {
-    success: '✅',
-    error: '❌',
-    info: 'ℹ️'
-  }
-  const toast = document.createElement('div')
-  toast.className = `toast ${type}`
-  toast.innerHTML = `
-    <span class="toast-icon">${icons[type]}</span>
-    <span class="toast-text">${message}</span>
-  `
-  container.appendChild(toast)
-  setTimeout(() => {
-    toast.style.opacity = '0'
-    toast.style.transform = 'translateX(100px)'
-    toast.style.transition = 'all 0.3s ease'
-    setTimeout(() => toast.remove(), 300)
-  }, 3500)
-}
+// Toast notifications (global assignment)
+window.showToast = showToast
 window.showToast = showToast
 
 // Booking handler
 window.handleBooking = (movieId: number) => {
-  const movie = nowShowingMovies.find(m => m.id === movieId) ||
-                nowShowingMovies.find(m => m.id === movieId)
-  const title = movie?.title || 'phim này'
-  showToast(`🎟️ Đang mở trang đặt vé cho "${title}"...`, 'success')
+  openSeatModal(movieId)
 }
 
 // Trailer handler
@@ -987,6 +1005,24 @@ interface SeatState {
 
 let currentTicket: TicketData | null = null
 
+function saveBooking(ticket: TicketData) {
+  const bookings = getBookings()
+  // Add to start (newest first)
+  bookings.unshift(ticket)
+  // Limit to last 30 bookings
+  localStorage.setItem('cine_bookings', JSON.stringify(bookings.slice(0, 30)))
+}
+
+function getBookings(): TicketData[] {
+  try {
+    const data = localStorage.getItem('cine_bookings')
+    return data ? JSON.parse(data) : []
+  } catch (e) {
+    console.error('Failed to parse bookings', e)
+    return []
+  }
+}
+
 const seatState: SeatState = {
   movieId: 0,
   selectedSeats: [],
@@ -1025,27 +1061,49 @@ const SEAT_PRICES: Record<string, number> = {
   sweetbox: 200000,  // per couple seat (2 people)
 }
 
-// Generate seat layout: 8 rows (A-H), 12 cols, with some taken seats
-function generateSeatMap(): { row: string; col: number; type: 'normal' | 'vip' | 'sweetbox'; taken: boolean }[][] {
+// ---- Real-time occupancy helpers ----
+function getOccupancyKey(movieId: number, date: string, time: string): string {
+  return `cine_occupied_${movieId}_${date.replace(/\//g, '-')}_${time.replace(/:/g, '-')}`
+}
+
+function getOccupiedSeats(movieId: number, date: string, time: string): string[] {
+  const key = getOccupancyKey(movieId, date, time)
+  const data = localStorage.getItem(key)
+  return data ? JSON.parse(data) : []
+}
+
+function saveOccupiedSeats(movieId: number, date: string, time: string, seats: string[]) {
+  const key = getOccupancyKey(movieId, date, time)
+  const current = getOccupiedSeats(movieId, date, time)
+  const updated = Array.from(new Set([...current, ...seats]))
+  localStorage.setItem(key, JSON.stringify(updated))
+  
+  // Trigger a custom event to notify other parts of the app if needed
+  window.dispatchEvent(new CustomEvent('seatsUpdated', { detail: { movieId, date, time } }))
+}
+
+// Generate seat layout: 8 rows (A-H), 12 cols, with dynamic occupancy
+function generateSeatMap(movieId: number, date: string, time: string): { row: string; col: number; type: 'normal' | 'vip' | 'sweetbox'; taken: boolean }[][] {
   const rows = ['A','B','C','D','E','F','G','H']
-  // VIP rows are E, F. Sweetbox is row H (6 couple seats)
-  const takenSeeds = [
-    'A3','A4','B7','B8','C2','C9','D5','D6','E1','E10',
-    'F3','F4','F9','G2','G7','G8','H1','H3','H5',
-  ]
+  const occupied = getOccupiedSeats(movieId, date, time)
+  
+  // Initial hardcoded taken seats (if any) as a baseline for new showtimes
+  const baselineTaken = (movieId === 1) ? ['A3','A4','B7','B8','C2','C9'] : []
+  const allTaken = Array.from(new Set([...baselineTaken, ...occupied]))
+
   return rows.map(row => {
     if (row === 'H') {
       // Sweetbox row: 6 couple seats
       return Array.from({ length: 6 }, (_, i) => ({
         row, col: i + 1,
         type: 'sweetbox' as const,
-        taken: takenSeeds.includes(`${row}${i + 1}`)
+        taken: allTaken.includes(`${row}${i + 1}`)
       }))
     }
     return Array.from({ length: 12 }, (_, i) => {
       const col = i + 1
       const type: 'normal' | 'vip' = (row === 'E' || row === 'F') ? 'vip' : 'normal'
-      return { row, col, type, taken: takenSeeds.includes(`${row}${col}`) }
+      return { row, col, type, taken: allTaken.includes(`${row}${col}`) }
     })
   })
 }
@@ -1059,7 +1117,7 @@ function getSeatPrice(type: 'normal' | 'vip' | 'sweetbox'): number {
 }
 
 function renderSeatMapHTML(): string {
-  const map = generateSeatMap()
+  const map = generateSeatMap(seatState.movieId, seatState.selectedDate, seatState.selectedTime)
   return map.map(rowSeats => {
     const rowLabel = rowSeats[0].row
     const isSweetbox = rowSeats[0].type === 'sweetbox'
@@ -1090,6 +1148,73 @@ function renderSeatMapHTML(): string {
     </div>`
   }).join('')
 }
+
+function refreshSeatMap() {
+  const mapEl = document.getElementById('sm-seat-map')
+  if (!mapEl) return
+  
+  // Save current selection (visually)
+  const currentSelection = seatState.selectedSeats
+  
+  mapEl.innerHTML = renderSeatMapHTML()
+  
+  // Restore selection (visually)
+  currentSelection.forEach(id => {
+    const seatBtn = mapEl.querySelector(`[data-seat="${id}"]`)
+    if (seatBtn && !seatBtn.classList.contains('taken')) {
+      seatBtn.classList.add('selected')
+    } else if (seatBtn && seatBtn.classList.contains('taken')) {
+      // If a seat became taken while it was selected, remove from state
+      seatState.selectedSeats = seatState.selectedSeats.filter(s => s !== id)
+    }
+  })
+  
+  // If we are on step 2, update summary
+  if (seatState.currentStep === 2) {
+    const movie = nowShowingMovies.find(m => m.id === seatState.movieId)
+    if (movie) updateSummary(movie)
+  }
+}
+
+let seatSimulationInterval: number | null = null
+
+function startSeatSimulation() {
+  if (seatSimulationInterval) return
+  seatSimulationInterval = window.setInterval(() => {
+    // 30% chance to simulate a booking every 8 seconds
+    if (Math.random() < 0.3) {
+      const rows = ['A','B','C','D','E','F','G'] // exclude H for simplicity
+      const row = rows[Math.floor(Math.random() * rows.length)]
+      const col = Math.floor(Math.random() * 12) + 1
+      const seatId = `${row}${col}`
+      
+      const occupied = getOccupiedSeats(seatState.movieId, seatState.selectedDate, seatState.selectedTime)
+      if (!occupied.includes(seatId) && !seatState.selectedSeats.includes(seatId)) {
+        saveOccupiedSeats(seatState.movieId, seatState.selectedDate, seatState.selectedTime, [seatId])
+        showToast('🔄 Có người vừa đặt ghế ' + seatId, 'info')
+      }
+    }
+  }, 8000)
+}
+
+function stopSeatSimulation() {
+  if (seatSimulationInterval) {
+    clearInterval(seatSimulationInterval)
+    seatSimulationInterval = null
+  }
+}
+
+// Cross-tab sync
+window.addEventListener('storage', (e) => {
+  if (e.key && e.key.startsWith('cine_occupied_')) {
+    refreshSeatMap()
+  }
+})
+
+// Listen for our own updates (same tab)
+window.addEventListener('seatsUpdated', () => {
+  refreshSeatMap()
+})
 
 // Build dates (today + 6 days)
 function buildDates(): { day: string; num: string; month: string; full: string }[] {
@@ -1441,12 +1566,14 @@ function openSeatModal(movieId: number) {
   })
 
   attachModalListeners(movie)
+  startSeatSimulation()
 }
 
 function closeSeatModal() {
   const backdrop = document.getElementById('seat-modal-backdrop')
   if (!backdrop) return
   backdrop.classList.remove('active')
+  stopSeatSimulation()
   setTimeout(() => backdrop.remove(), 350)
 }
 
@@ -1693,6 +1820,17 @@ function populateCheckout() {
   const comboTotal = calcComboTotal()
   if (comboTotEl) comboTotEl.textContent = comboTotal > 0 ? comboTotal.toLocaleString('vi-VN') + ' ₫' : '0 ₫'
   if (grandTotEl) grandTotEl.textContent = (seatState.totalSeat + comboTotal).toLocaleString('vi-VN') + ' ₫'
+
+  // AUTO-FILL USER INFO
+  const user = Auth.getCurrentUser()
+  if (user) {
+    const nameInput  = document.getElementById('ck-name')  as HTMLInputElement
+    const phoneInput = document.getElementById('ck-phone') as HTMLInputElement
+    const emailInput = document.getElementById('ck-email') as HTMLInputElement
+    if (nameInput && !nameInput.value)   nameInput.value = user.name
+    if (phoneInput && !phoneInput.value) phoneInput.value = user.phone
+    if (emailInput && !emailInput.value) emailInput.value = user.email
+  }
 }
 
 function calcComboTotal(): number {
@@ -1862,12 +2000,347 @@ function processPayment(_movie: Movie) {
     mainContent.style.display = 'none'
     successEl.classList.add('show')
     showToast('🎟️ Đặt vé thành công!', 'success')
+
+    // Save to history
+    if (currentTicket) {
+      saveBooking(currentTicket)
+      
+      // PERSIST SEATS FOR REAL-TIME
+      saveOccupiedSeats(seatState.movieId, seatState.selectedDate, seatState.selectedTime, seatState.selectedSeats)
+      
+      // UPDATE MEMBERSHIP IF LOGGED IN
+      const user = Auth.getCurrentUser()
+      if (user) {
+        Auth.updateMembership(grand)
+        refreshNavbar()
+      }
+    }
   }, 1200)
 }
 
 // ---- Patch handleBooking to open the seat modal ----
-window.handleBooking = (movieId: number) => {
-  openSeatModal(movieId)
+// ---- Admin Dashboard Integration ----
+function openAdminDashboard() {
+  const app = document.getElementById('app')!
+  const container = document.createElement('div')
+  container.id = 'admin-root'
+  document.body.appendChild(container)
+  app.style.display = 'none'
+
+  renderAdminDashboard(container, () => {
+    app.style.display = ''
+    container.remove()
+    window.location.hash = '#'
+  })
 }
 
-console.log('🎬 CineBooking + Seat Selection loaded!')
+window.addEventListener('hashchange', () => {
+  if (window.location.hash === '#admin') {
+    openAdminDashboard()
+  }
+})
+
+// Check initial hash
+if (window.location.hash === '#admin') {
+  setTimeout(openAdminDashboard, 500)
+}
+
+document.getElementById('nav-admin-btn')?.addEventListener('click', (e) => {
+  e.preventDefault()
+  window.location.hash = '#admin'
+})
+
+// ---- Booking History Modal ----
+function renderHistoryModal(): string {
+  const bookings = getBookings()
+  let listHTML = ''
+
+  if (bookings.length === 0) {
+    listHTML = `
+      <div class="history-empty">
+        <div class="empty-icon">🎟️</div>
+        <h3>Chưa có lịch sử đặt vé</h3>
+        <p>Bạn chưa thực hiện giao dịch nào. Hãy chọn phim và đặt vé ngay!</p>
+        <button class="btn-primary" onclick="closeHistoryModal()">Khám phá ngay</button>
+      </div>
+    `
+  } else {
+    listHTML = bookings.map((b, index) => {
+      // Find movie poster
+      const movie = [...nowShowingMovies, ...comingSoonMovies].find(m => m.title === b.movieTitle)
+      const poster = movie?.poster || 'https://images.unsplash.com/photo-1534809027769-b00d750a6bac?w=100&h=150&fit=crop&q=80'
+
+      return `
+        <div class="history-item">
+          <img src="${poster}" class="hi-poster" alt="${b.movieTitle}" />
+          <div class="hi-content">
+            <div class="hi-header">
+              <h4 class="hi-title">${b.movieTitle}</h4>
+              <span class="hi-code">${b.bookingCode}</span>
+            </div>
+            <div class="hi-details">
+              <div class="hi-row">
+                <span>📍 Suất chiếu:</span>
+                <b>${b.time} – ${b.date}</b>
+              </div>
+              <div class="hi-row">
+                <span>💺 Ghế:</span>
+                <b>${b.seats.join(', ')}</b>
+              </div>
+              <div class="hi-row">
+                <span>💰 Tổng tiền:</span>
+                <b class="hi-price">${b.totalAmount.toLocaleString('vi-VN')} ₫</b>
+              </div>
+            </div>
+            <div class="hi-footer">
+              <button class="hi-btn-view" onclick="viewTicketFromHistory(${index})">
+                👁️ Xem vé & QR
+              </button>
+            </div>
+          </div>
+        </div>
+      `
+    }).join('')
+  }
+
+  return `
+    <div class="modal-backdrop" id="history-modal-backdrop">
+      <div class="modal-content history-modal">
+        <div class="sm-header">
+          <div class="sm-title-box">
+            <h2 class="sm-title">Lịch Sử Đặt Vé</h2>
+            <p class="sm-subtitle">Danh sách các vé phim bạn đã đặt gần đây</p>
+          </div>
+          <button class="sm-close-btn" id="history-close-btn">×</button>
+        </div>
+        
+        <div class="history-list">
+          ${listHTML}
+        </div>
+      </div>
+    </div>
+  `
+}
+
+function openHistoryModal() {
+  document.getElementById('history-modal-backdrop')?.remove()
+  document.body.insertAdjacentHTML('beforeend', renderHistoryModal())
+  
+  const backdrop = document.getElementById('history-modal-backdrop')!
+  requestAnimationFrame(() => backdrop.classList.add('active'))
+
+  // Close handlers
+  document.getElementById('history-close-btn')?.addEventListener('click', closeHistoryModal)
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) closeHistoryModal()
+  })
+}
+
+function closeHistoryModal() {
+  const backdrop = document.getElementById('history-modal-backdrop')
+  if (!backdrop) return
+  backdrop.classList.remove('active')
+  setTimeout(() => backdrop.remove(), 350)
+}
+
+window.closeHistoryModal = closeHistoryModal
+
+window.viewTicketFromHistory = (index: number) => {
+  const bookings = getBookings()
+  const b = bookings[index]
+  if (!b) return
+
+  closeHistoryModal()
+  
+  // Reuse currentTicket for rendering
+  currentTicket = b
+  
+  // Simulate opening success modal with this ticket
+  const movie = [...nowShowingMovies, ...comingSoonMovies].find(m => m.title === b.movieTitle)
+  if (!movie) {
+    showToast('Không tìm thấy thông tin phim', 'error')
+    return
+  }
+
+  openSeatModal(movie.id)
+  
+  // Skip to step 3 success
+  setTimeout(() => {
+    // We need to bypass the normal flow to show success directly
+    const mainContent = document.getElementById('sm-main-content')!
+    const successEl   = document.getElementById('sm-success')!
+    const codeEl      = document.getElementById('sm-booking-code')!
+    const infoEl      = document.getElementById('success-info')
+    
+    document.getElementById('step-1')?.classList.add('done')
+    document.getElementById('step-2')?.classList.add('done')
+    document.getElementById('step-3')?.classList.add('done')
+
+    codeEl.textContent = b.bookingCode
+    
+    if (infoEl) {
+      const discountRow = (b.discountCode)
+        ? `<div class="sd-row"><span>Giảm giá (${b.discountCode})</span><b style="color:#10b981">Đã áp dụng</b></div>`
+        : ''
+      infoEl.innerHTML = `
+        <div class="success-detail-grid">
+          <div class="sd-row"><span>Khách hàng</span><b>${b.customerName}</b></div>
+          <div class="sd-row"><span>Ghế</span><b>${b.seats.join(', ')}</b></div>
+          <div class="sd-row"><span>Lịch chiếu</span><b>${b.time} – ${b.date}</b></div>
+          <div class="sd-row"><span>Thanh toán</span><b>${b.paymentMethod}</b></div>
+          ${discountRow}
+          <div class="sd-row total"><span>Tổng</span><b>${b.totalAmount.toLocaleString('vi-VN')} ₫</b></div>
+        </div>
+      `
+    }
+
+    // Render QR
+    const canvas = document.getElementById('sm-qr-canvas') as HTMLCanvasElement
+    if (canvas) renderQRToCanvas(canvas, b)
+
+    mainContent.style.display = 'none'
+    successEl.classList.add('show')
+  }, 100)
+}
+
+// =========================================
+// PROFILE MODAL
+// =========================================
+function openProfileModal() {
+  const user = Auth.getCurrentUser()
+  if (!user) return
+
+  const modalHTML = `
+    <div class="seat-modal-backdrop active" id="profile-modal-backdrop">
+      <div class="auth-card profile-card" style="max-width: 500px; margin: 40px auto; position: relative;">
+        <button class="sm-close" id="profile-close-btn" style="position: absolute; right: 20px; top: 20px;">✕</button>
+        
+        <div class="profile-header" style="text-align: center; margin-bottom: 25px;">
+          <div class="profile-avatar-lg" style="width: 100px; height: 100px; border-radius: 50%; overflow: hidden; margin: 0 auto 15px; border: 3px solid var(--accent-gold);">
+            <img src="${user.avatar || 'https://i.pravatar.cc/150'}" style="width: 100%; height: 100%; object-fit: cover;">
+          </div>
+          <h2 style="margin: 0; color: var(--text-h);">${user.name}</h2>
+          <span class="badge" style="background: ${Auth.getTierBadgeColor(user.tier)}; color: white; padding: 4px 12px; border-radius: 20px; font-size: 11px; text-transform: uppercase; font-weight: 700; margin-top: 8px; display: inline-block;">${user.tier} Member</span>
+        </div>
+
+        <div class="profile-stats-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
+          <div class="stat-card" style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase;">Điểm tích luỹ</div>
+            <div style="font-size: 24px; color: var(--accent-gold); font-weight: 700;">${user.points}</div>
+          </div>
+          <div class="stat-card" style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase;">Đã chi tiêu</div>
+            <div style="font-size: 18px; color: var(--text-h); font-weight: 700;">${user.totalSpent.toLocaleString('vi-VN')} ₫</div>
+          </div>
+        </div>
+
+        <div class="profile-info-list" style="margin-bottom: 25px; background: rgba(255,255,255,0.03); padding: 5px 15px; border-radius: 12px;">
+          <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <span style="color: var(--text-dim); font-size: 14px;">Email</span>
+            <span style="color: var(--text-h); font-size: 14px;">${user.email}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 12px 0;">
+            <span style="color: var(--text-dim); font-size: 14px;">Số điện thoại</span>
+            <span style="color: var(--text-h); font-size: 14px;">${user.phone}</span>
+          </div>
+        </div>
+
+        <button id="profile-logout-btn" class="auth-button" style="background: #e53e3e; margin-top: 10px;">Đăng Xuất</button>
+      </div>
+    </div>
+  `
+  document.body.insertAdjacentHTML('beforeend', modalHTML)
+
+  document.getElementById('profile-close-btn')?.addEventListener('click', () => {
+    document.getElementById('profile-modal-backdrop')?.remove()
+  })
+  
+  document.getElementById('profile-logout-btn')?.addEventListener('click', () => {
+    Auth.logout()
+    document.getElementById('profile-modal-backdrop')?.remove()
+    refreshNavbar()
+    showToast('👋 Đã đăng xuất thành công', 'info')
+  })
+}
+
+function refreshNavbar() {
+  const navbarRight = document.querySelector('.navbar-right')
+  if (!navbarRight) return
+
+  const user = Auth.getCurrentUser()
+  navbarRight.innerHTML = `
+    <button class="search-btn" id="search-btn" aria-label="Tìm kiếm phim">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <span class="search-text">Tìm phim...</span>
+    </button>
+    ${user ? `
+      <div class="user-profile-nav" id="nav-user-profile" style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 5px 12px; border-radius: 30px; background: rgba(255,255,255,0.05);">
+        <div class="user-avatar-sm" style="width: 32px; height: 32px; border-radius: 50%; overflow: hidden; border: 1.5px solid var(--accent-gold);">
+          <img src="${user.avatar || 'https://i.pravatar.cc/100'}" style="width: 100%; height: 100%; object-fit: cover;">
+        </div>
+        <div class="user-nav-info" style="display: flex; flex-direction: column; line-height: 1.2;">
+          <span class="user-nav-name" style="font-size: 13px; font-weight: 600; color: var(--text-h);">${user.name.split(' ')[0]}</span>
+          <span class="user-nav-tier" style="font-size: 10px; font-weight: 700; color: ${Auth.getTierBadgeColor(user.tier)}; text-transform: uppercase;">${user.tier}</span>
+        </div>
+      </div>
+    ` : `
+      <a href="#auth" class="btn-primary" id="nav-login-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+        </svg>
+        Đăng Nhập
+      </a>
+    `}
+    <button class="hamburger" id="hamburger-btn" aria-label="Mở menu">
+      <span></span><span></span><span></span>
+    </button>
+  `
+  attachNavbarListeners()
+}
+
+function handleAuthRoute() {
+  const container = document.createElement('div')
+  container.id = 'auth-root'
+  document.body.appendChild(container)
+  document.getElementById('app')!.style.display = 'none'
+
+  const goBack = () => {
+    document.getElementById('app')!.style.display = ''
+    container.remove()
+    window.location.hash = '#'
+    refreshNavbar()
+  }
+
+  const showLogin = () => Auth.renderLogin(container, goBack, showRegister, () => {}, goBack)
+  const showRegister = () => Auth.renderRegister(container, goBack, showLogin, goBack)
+  
+  showLogin()
+}
+
+function attachNavbarListeners() {
+  document.getElementById('nav-user-profile')?.addEventListener('click', openProfileModal)
+  document.getElementById('nav-login-btn')?.addEventListener('click', (e) => {
+    e.preventDefault()
+    handleAuthRoute()
+  })
+}
+
+// Initial listeners
+attachNavbarListeners()
+
+// Global history handler
+document.getElementById('nav-history-btn')?.addEventListener('click', (e) => {
+  e.preventDefault()
+  if (typeof openHistoryModal === 'function') {
+    openHistoryModal()
+  } else {
+    showToast('Lịch sử đặt vé đang được tải...', 'info')
+  }
+})
+
+// Initialize Navbar
+refreshNavbar()
+
+console.log('🎬 CineBooking + History + Auth loaded!')

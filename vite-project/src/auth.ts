@@ -1,5 +1,70 @@
 import { api } from './api';
 
+export type MembershipTier = 'Member' | 'Silver' | 'Gold';
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  points: number;
+  totalSpent: number;
+  tier: MembershipTier;
+  avatar?: string;
+}
+
+let currentUser: User | null = null;
+
+export function getCurrentUser(): User | null {
+  if (!currentUser) {
+    const data = localStorage.getItem('cine_auth_user');
+    if (data) currentUser = JSON.parse(data);
+  }
+  return currentUser;
+}
+
+export function setCurrentUser(user: User | null) {
+  currentUser = user;
+  if (user) {
+    localStorage.setItem('cine_auth_user', JSON.stringify(user));
+  } else {
+    localStorage.removeItem('cine_auth_user');
+  }
+}
+
+export function logout() {
+  setCurrentUser(null);
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('userRole');
+}
+
+export function updateMembership(amountSpent: number): User | null {
+  const user = getCurrentUser();
+  if (!user) return null;
+
+  user.totalSpent += amountSpent;
+  // Earn 5% points (e.g. 100k -> 5 points)
+  const pointsEarned = Math.round((amountSpent * 0.05) / 1000);
+  user.points += pointsEarned;
+
+  // Tiers logic
+  if (user.totalSpent >= 5000000) user.tier = 'Gold';
+  else if (user.totalSpent >= 1000000) user.tier = 'Silver';
+  else user.tier = 'Member';
+
+  setCurrentUser(user);
+  return user;
+}
+
+export function getTierBadgeColor(tier: MembershipTier): string {
+  switch (tier) {
+    case 'Gold': return '#ecc94b'; // Gold
+    case 'Silver': return '#a0aec0'; // Silver
+    default: return '#4a5568'; // Member
+  }
+}
+
 export function renderLogin(
   container: HTMLElement, 
   onLogin: () => void, 
@@ -52,11 +117,23 @@ export function renderLogin(
       localStorage.setItem('accessToken', 'mock_access_token');
       localStorage.setItem('refreshToken', 'mock_refresh_token');
       
-      // DECENTRALIZATION: Simple rule - domain @admin.com becomes Admin
       const role = email.toLowerCase().endsWith('@admin.com') ? 'admin' : 'user';
       localStorage.setItem('userRole', role);
 
-      alert(`Login as ${role.toUpperCase()} successful! Tokens stored.`);
+      // SAVE USER OBJECT
+      const mockUser: User = {
+        id: 'u' + Math.random().toString(36).substr(2, 5),
+        name: email.split('@')[0],
+        email: email,
+        phone: '09' + Math.floor(10000000 + Math.random() * 90000000),
+        points: 50,
+        totalSpent: 450000,
+        tier: 'Member',
+        avatar: `https://i.pravatar.cc/150?u=${email}`
+      };
+      setCurrentUser(mockUser);
+
+      alert(`Login successful! Points: ${mockUser.points}, Tier: ${mockUser.tier}`);
       onLogin();
     } catch (err) {
       alert('Login failed: ' + (err as Error).message);
@@ -191,12 +268,22 @@ export function renderRegister(container: HTMLElement, onRegister: () => void, o
   
   document.getElementById('register-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    // const name = (document.getElementById('reg-name') as HTMLInputElement).value;
-    // const email = (document.getElementById('reg-email') as HTMLInputElement).value;
-    // const password = (document.getElementById('reg-password') as HTMLInputElement).value;
+    const name = (document.getElementById('reg-name') as HTMLInputElement).value;
+    const email = (document.getElementById('reg-email') as HTMLInputElement).value;
 
     try {
-      alert('Registration successful! Please login.');
+      const newUser: User = {
+        id: 'u' + Math.random().toString(36).substr(2, 5),
+        name,
+        email,
+        phone: '0987654321', // Dummy
+        points: 0,
+        totalSpent: 0,
+        tier: 'Member'
+      };
+      setCurrentUser(newUser);
+      
+      alert('Registration successful! Points: 0, Tier: Member');
       onRegister();
     } catch (err) {
       alert('Registration failed: ' + (err as Error).message);
