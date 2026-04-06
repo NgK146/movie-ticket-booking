@@ -1,4 +1,4 @@
-import { api } from './api';
+// src/auth.ts
 
 export type MembershipTier = 'Member' | 'Silver' | 'Gold';
 

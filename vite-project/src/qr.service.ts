@@ -19,6 +19,7 @@ export interface TicketData {
   selectedCombos?: Record<string, number>
   comboTotal?: number
   discountCode?: string
+  pointsUsed?: number
 }
 
 // ---- Encode ticket data thành chuỗi cho QR ----
