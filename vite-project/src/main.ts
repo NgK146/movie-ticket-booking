@@ -1,10 +1,32 @@
 import './style.css'
 import { renderQRToCanvas, downloadQR, type TicketData } from './qr.service'
 import { renderAdminDashboard } from './admin'
+import * as Auth from './auth'
 
 // =========================================
-// DATA: Phim Đang Chiếu
+// UI HELPERS
 // =========================================
+export function showToast(message: string, type: 'success' | 'error' | 'info' = 'success') {
+  const container = document.getElementById('toast-container')
+  if (!container) return
+
+  const toast = document.createElement('div')
+  toast.className = `toast ${type}`
+  toast.innerHTML = `
+    <div class="toast-icon">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</div>
+    <div class="toast-content">${message}</div>
+    <button class="toast-close">✕</button>
+  `
+  container.appendChild(toast)
+
+  const remove = () => {
+    toast.classList.add('out')
+    setTimeout(() => toast.remove(), 400)
+  }
+
+  toast.querySelector('.toast-close')?.addEventListener('click', remove)
+  setTimeout(remove, 4500)
+}
 interface Movie {
   id: number
   title: string
@@ -517,12 +539,26 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           </svg>
           <span class="search-text">Tìm phim...</span>
         </button>
-        <a href="#auth" class="btn-primary">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-          </svg>
-          Đăng Nhập
-        </a>
+        
+        ${Auth.getCurrentUser() ? `
+          <div class="user-profile-nav" id="nav-user-profile">
+            <div class="user-avatar-sm">
+              <img src="${Auth.getCurrentUser()?.avatar || 'https://i.pravatar.cc/100'}" alt="Avatar">
+            </div>
+            <div class="user-nav-info">
+              <span class="user-nav-name">${Auth.getCurrentUser()?.name.split(' ')[0]}</span>
+              <span class="user-nav-tier" style="color: ${Auth.getTierBadgeColor(Auth.getCurrentUser()!.tier)}">${Auth.getCurrentUser()?.tier}</span>
+            </div>
+          </div>
+        ` : `
+          <a href="#auth" class="btn-primary" id="nav-login-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+            Đăng Nhập
+          </a>
+        `}
+        
         <button class="hamburger" id="hamburger-btn" aria-label="Mở menu">
           <span></span><span></span><span></span>
         </button>
@@ -811,28 +847,8 @@ declare global {
   }
 }
 
-// Toast notifications
-function showToast(message: string, type: 'success' | 'error' | 'info' = 'success') {
-  const container = document.getElementById('toast-container')!
-  const icons: Record<string, string> = {
-    success: '✅',
-    error: '❌',
-    info: 'ℹ️'
-  }
-  const toast = document.createElement('div')
-  toast.className = `toast ${type}`
-  toast.innerHTML = `
-    <span class="toast-icon">${icons[type]}</span>
-    <span class="toast-text">${message}</span>
-  `
-  container.appendChild(toast)
-  setTimeout(() => {
-    toast.style.opacity = '0'
-    toast.style.transform = 'translateX(100px)'
-    toast.style.transition = 'all 0.3s ease'
-    setTimeout(() => toast.remove(), 300)
-  }, 3500)
-}
+// Toast notifications (global assignment)
+window.showToast = showToast
 window.showToast = showToast
 
 // Booking handler
@@ -1804,6 +1820,17 @@ function populateCheckout() {
   const comboTotal = calcComboTotal()
   if (comboTotEl) comboTotEl.textContent = comboTotal > 0 ? comboTotal.toLocaleString('vi-VN') + ' ₫' : '0 ₫'
   if (grandTotEl) grandTotEl.textContent = (seatState.totalSeat + comboTotal).toLocaleString('vi-VN') + ' ₫'
+
+  // AUTO-FILL USER INFO
+  const user = Auth.getCurrentUser()
+  if (user) {
+    const nameInput  = document.getElementById('ck-name')  as HTMLInputElement
+    const phoneInput = document.getElementById('ck-phone') as HTMLInputElement
+    const emailInput = document.getElementById('ck-email') as HTMLInputElement
+    if (nameInput && !nameInput.value)   nameInput.value = user.name
+    if (phoneInput && !phoneInput.value) phoneInput.value = user.phone
+    if (emailInput && !emailInput.value) emailInput.value = user.email
+  }
 }
 
 function calcComboTotal(): number {
@@ -1980,6 +2007,13 @@ function processPayment(_movie: Movie) {
       
       // PERSIST SEATS FOR REAL-TIME
       saveOccupiedSeats(seatState.movieId, seatState.selectedDate, seatState.selectedTime, seatState.selectedSeats)
+      
+      // UPDATE MEMBERSHIP IF LOGGED IN
+      const user = Auth.getCurrentUser()
+      if (user) {
+        Auth.updateMembership(grand)
+        refreshNavbar()
+      }
     }
   }, 1200)
 }
@@ -2169,10 +2203,144 @@ window.viewTicketFromHistory = (index: number) => {
   }, 100)
 }
 
+// =========================================
+// PROFILE MODAL
+// =========================================
+function openProfileModal() {
+  const user = Auth.getCurrentUser()
+  if (!user) return
+
+  const modalHTML = `
+    <div class="seat-modal-backdrop active" id="profile-modal-backdrop">
+      <div class="auth-card profile-card" style="max-width: 500px; margin: 40px auto; position: relative;">
+        <button class="sm-close" id="profile-close-btn" style="position: absolute; right: 20px; top: 20px;">✕</button>
+        
+        <div class="profile-header" style="text-align: center; margin-bottom: 25px;">
+          <div class="profile-avatar-lg" style="width: 100px; height: 100px; border-radius: 50%; overflow: hidden; margin: 0 auto 15px; border: 3px solid var(--accent-gold);">
+            <img src="${user.avatar || 'https://i.pravatar.cc/150'}" style="width: 100%; height: 100%; object-fit: cover;">
+          </div>
+          <h2 style="margin: 0; color: var(--text-h);">${user.name}</h2>
+          <span class="badge" style="background: ${Auth.getTierBadgeColor(user.tier)}; color: white; padding: 4px 12px; border-radius: 20px; font-size: 11px; text-transform: uppercase; font-weight: 700; margin-top: 8px; display: inline-block;">${user.tier} Member</span>
+        </div>
+
+        <div class="profile-stats-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
+          <div class="stat-card" style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase;">Điểm tích luỹ</div>
+            <div style="font-size: 24px; color: var(--accent-gold); font-weight: 700;">${user.points}</div>
+          </div>
+          <div class="stat-card" style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase;">Đã chi tiêu</div>
+            <div style="font-size: 18px; color: var(--text-h); font-weight: 700;">${user.totalSpent.toLocaleString('vi-VN')} ₫</div>
+          </div>
+        </div>
+
+        <div class="profile-info-list" style="margin-bottom: 25px; background: rgba(255,255,255,0.03); padding: 5px 15px; border-radius: 12px;">
+          <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <span style="color: var(--text-dim); font-size: 14px;">Email</span>
+            <span style="color: var(--text-h); font-size: 14px;">${user.email}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 12px 0;">
+            <span style="color: var(--text-dim); font-size: 14px;">Số điện thoại</span>
+            <span style="color: var(--text-h); font-size: 14px;">${user.phone}</span>
+          </div>
+        </div>
+
+        <button id="profile-logout-btn" class="auth-button" style="background: #e53e3e; margin-top: 10px;">Đăng Xuất</button>
+      </div>
+    </div>
+  `
+  document.body.insertAdjacentHTML('beforeend', modalHTML)
+
+  document.getElementById('profile-close-btn')?.addEventListener('click', () => {
+    document.getElementById('profile-modal-backdrop')?.remove()
+  })
+  
+  document.getElementById('profile-logout-btn')?.addEventListener('click', () => {
+    Auth.logout()
+    document.getElementById('profile-modal-backdrop')?.remove()
+    refreshNavbar()
+    showToast('👋 Đã đăng xuất thành công', 'info')
+  })
+}
+
+function refreshNavbar() {
+  const navbarRight = document.querySelector('.navbar-right')
+  if (!navbarRight) return
+
+  const user = Auth.getCurrentUser()
+  navbarRight.innerHTML = `
+    <button class="search-btn" id="search-btn" aria-label="Tìm kiếm phim">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <span class="search-text">Tìm phim...</span>
+    </button>
+    ${user ? `
+      <div class="user-profile-nav" id="nav-user-profile" style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 5px 12px; border-radius: 30px; background: rgba(255,255,255,0.05);">
+        <div class="user-avatar-sm" style="width: 32px; height: 32px; border-radius: 50%; overflow: hidden; border: 1.5px solid var(--accent-gold);">
+          <img src="${user.avatar || 'https://i.pravatar.cc/100'}" style="width: 100%; height: 100%; object-fit: cover;">
+        </div>
+        <div class="user-nav-info" style="display: flex; flex-direction: column; line-height: 1.2;">
+          <span class="user-nav-name" style="font-size: 13px; font-weight: 600; color: var(--text-h);">${user.name.split(' ')[0]}</span>
+          <span class="user-nav-tier" style="font-size: 10px; font-weight: 700; color: ${Auth.getTierBadgeColor(user.tier)}; text-transform: uppercase;">${user.tier}</span>
+        </div>
+      </div>
+    ` : `
+      <a href="#auth" class="btn-primary" id="nav-login-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+        </svg>
+        Đăng Nhập
+      </a>
+    `}
+    <button class="hamburger" id="hamburger-btn" aria-label="Mở menu">
+      <span></span><span></span><span></span>
+    </button>
+  `
+  attachNavbarListeners()
+}
+
+function handleAuthRoute() {
+  const container = document.createElement('div')
+  container.id = 'auth-root'
+  document.body.appendChild(container)
+  document.getElementById('app')!.style.display = 'none'
+
+  const goBack = () => {
+    document.getElementById('app')!.style.display = ''
+    container.remove()
+    window.location.hash = '#'
+    refreshNavbar()
+  }
+
+  const showLogin = () => Auth.renderLogin(container, goBack, showRegister, () => {}, goBack)
+  const showRegister = () => Auth.renderRegister(container, goBack, showLogin, goBack)
+  
+  showLogin()
+}
+
+function attachNavbarListeners() {
+  document.getElementById('nav-user-profile')?.addEventListener('click', openProfileModal)
+  document.getElementById('nav-login-btn')?.addEventListener('click', (e) => {
+    e.preventDefault()
+    handleAuthRoute()
+  })
+}
+
+// Initial listeners
+attachNavbarListeners()
+
 // Global history handler
 document.getElementById('nav-history-btn')?.addEventListener('click', (e) => {
   e.preventDefault()
-  openHistoryModal()
+  if (typeof openHistoryModal === 'function') {
+    openHistoryModal()
+  } else {
+    showToast('Lịch sử đặt vé đang được tải...', 'info')
+  }
 })
 
-console.log('🎬 CineBooking + History loaded!')
+// Initialize Navbar
+refreshNavbar()
+
+console.log('🎬 CineBooking + History + Auth loaded!')
