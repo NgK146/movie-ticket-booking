@@ -13,8 +13,11 @@ export interface TicketData {
   time: string
   seats: string[]
   customerName: string
+  phone: string
   totalAmount: number   // VND, đã tính giảm giá
   paymentMethod: string
+  selectedCombos?: Record<string, number>
+  comboTotal?: number
   discountCode?: string
 }
 

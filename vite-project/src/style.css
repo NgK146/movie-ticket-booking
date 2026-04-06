@@ -2435,6 +2435,56 @@ body {
 }
 
 /* =========================================
+   BOOKING TIMER
+   ========================================= */
+.sm-timer {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  color: #9494b0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 15px;
+  white-space: nowrap;
+}
+
+.sm-timer b {
+  color: #f0f0f5;
+  font-family: 'Outfit', monospace;
+  font-size: 14px;
+}
+
+.sm-timer.warning {
+  background: rgba(255,61,90,0.1);
+  border-color: rgba(255,61,90,0.3);
+  color: #ff3d5a;
+  animation: pulse-timer 1.5s infinite;
+}
+
+.sm-timer.warning b {
+  color: #ff3d5a;
+}
+
+@keyframes pulse-timer {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+@media (max-width: 768px) {
+  .sm-timer {
+    position: absolute;
+    top: 65px;
+    right: 16px;
+    margin-left: 0;
+    z-index: 10;
+  }
+}
+
+/* =========================================
    COUPON / DISCOUNT CODE
    ========================================= */
 
@@ -2828,4 +2878,244 @@ body {
   .hi-title {
     font-size: 15px;
   }
+}
+
+/* =========================================
+   USER PROFILE MODAL
+   ========================================= */
+.profile-modal {
+  max-width: 500px !important;
+  background: rgba(15, 15, 25, 0.8) !important;
+}
+
+.profile-content {
+  padding: 10px 0;
+}
+
+/* Membership Card */
+.membership-card {
+  border-radius: 20px;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 24px;
+  color: white;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.membership-card.tier-Member {
+  background: linear-gradient(135deg, #4a5568, #2d3748);
+}
+
+.membership-card.tier-Silver {
+  background: linear-gradient(135deg, #a0aec0, #718096);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.membership-card.tier-Gold {
+  background: linear-gradient(135deg, #ecc94b, #d69e2e);
+  color: #1a202c;
+}
+
+.membership-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.tier-name {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-family: 'Outfit', sans-serif;
+}
+
+.points-display {
+  text-align: right;
+}
+
+.points-val {
+  display: block;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.points-label {
+  font-size: 11px;
+  opacity: 0.8;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.membership-footer {
+  margin-top: 15px;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.progress-track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #fff;
+  border-radius: 3px;
+  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.membership-card.tier-Gold .progress-fill {
+  background: #1a202c;
+}
+
+/* Profile Form */
+.profile-section {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.section-h {
+  font-size: 14px;
+  font-weight: 700;
+  color: #94a3b8;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.profile-row:last-child {
+  margin-bottom: 0;
+}
+
+.profile-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #5a5a72;
+  text-transform: uppercase;
+}
+
+.profile-val {
+  color: #f0f0f5;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.profile-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: white;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.profile-input:focus {
+  border-color: #ff3d5a;
+  background: rgba(255, 61, 90, 0.05);
+}
+
+.profile-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.btn-profile {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: 'Outfit', sans-serif;
+}
+
+.btn-profile-edit {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.btn-profile-edit:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.btn-profile-save {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border: none;
+  color: white;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+}
+
+.btn-logout {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  margin-top: 10px;
+}
+
+.btn-logout:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.avatar-edit-wrap {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 20px;
+}
+
+.avatar-edit-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #ff3d5a;
+}
+
+.avatar-edit-btn {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 28px;
+  height: 28px;
+  background: #ff3d5a;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  border: 2px solid #0f0f19;
+  cursor: pointer;
 }
