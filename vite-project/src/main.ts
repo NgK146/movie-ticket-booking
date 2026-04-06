@@ -1177,6 +1177,39 @@ function refreshSeatMap() {
 }
 
 let seatSimulationInterval: number | null = null
+let bookingTimerInterval: number | null = null
+
+function startBookingTimer(durationSeconds: number) {
+  stopBookingTimer()
+  let timer = durationSeconds
+  const timerEl = document.getElementById('sm-timer')
+  
+  bookingTimerInterval = window.setInterval(() => {
+    const minutes = Math.floor(timer / 60)
+    const seconds = timer % 60
+    const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+    
+    if (timerEl) {
+      timerEl.innerHTML = `<span>⏳</span> Thời gian còn lại: <b>${timeStr}</b>`
+      if (timer <= 60) {
+        timerEl.classList.add('warning')
+      }
+    }
+
+    if (--timer < 0) {
+      stopBookingTimer()
+      closeSeatModal()
+      showToast('⏰ Hết thời gian giữ ghế. Vui lòng thực hiện lại!', 'error')
+    }
+  }, 1000)
+}
+
+function stopBookingTimer() {
+  if (bookingTimerInterval) {
+    clearInterval(bookingTimerInterval)
+    bookingTimerInterval = null
+  }
+}
 
 function startSeatSimulation() {
   if (seatSimulationInterval) return
@@ -1277,6 +1310,9 @@ function renderSeatModal(movie: Movie): string {
               <span>🎬 ${movie.language}</span>
               <span>📍 CGV Vincom</span>
             </div>
+          </div>
+          <div class="sm-timer" id="sm-timer">
+            <span>⏳</span> Thời gian còn lại: <b>05:00</b>
           </div>
           <button class="sm-close" id="sm-close-btn" aria-label="Đóng">✕</button>
         </div>
@@ -1567,6 +1603,7 @@ function openSeatModal(movieId: number) {
 
   attachModalListeners(movie)
   startSeatSimulation()
+  startBookingTimer(300) // 5 minutes
 }
 
 function closeSeatModal() {
@@ -1574,6 +1611,7 @@ function closeSeatModal() {
   if (!backdrop) return
   backdrop.classList.remove('active')
   stopSeatSimulation()
+  stopBookingTimer()
   setTimeout(() => backdrop.remove(), 350)
 }
 
@@ -2000,6 +2038,7 @@ function processPayment(_movie: Movie) {
     mainContent.style.display = 'none'
     successEl.classList.add('show')
     showToast('🎟️ Đặt vé thành công!', 'success')
+    stopBookingTimer()
 
     // Save to history
     if (currentTicket) {

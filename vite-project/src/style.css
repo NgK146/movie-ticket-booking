@@ -2435,6 +2435,56 @@ body {
 }
 
 /* =========================================
+   BOOKING TIMER
+   ========================================= */
+.sm-timer {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  color: #9494b0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 15px;
+  white-space: nowrap;
+}
+
+.sm-timer b {
+  color: #f0f0f5;
+  font-family: 'Outfit', monospace;
+  font-size: 14px;
+}
+
+.sm-timer.warning {
+  background: rgba(255,61,90,0.1);
+  border-color: rgba(255,61,90,0.3);
+  color: #ff3d5a;
+  animation: pulse-timer 1.5s infinite;
+}
+
+.sm-timer.warning b {
+  color: #ff3d5a;
+}
+
+@keyframes pulse-timer {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+@media (max-width: 768px) {
+  .sm-timer {
+    position: absolute;
+    top: 65px;
+    right: 16px;
+    margin-left: 0;
+    z-index: 10;
+  }
+}
+
+/* =========================================
    COUPON / DISCOUNT CODE
    ========================================= */
 
