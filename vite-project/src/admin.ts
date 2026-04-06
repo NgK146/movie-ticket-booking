@@ -37,8 +37,8 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
             <li class="${activeTab === 'rooms' ? 'active' : ''}" id="tab-rooms">🛋 Rooms</li>
             <li class="${activeTab === 'showtimes' ? 'active' : ''}" id="tab-showtimes">📅 Showtimes</li>
             <li class="${activeTab === 'coupons' ? 'active' : ''}" id="tab-coupons">🎟 Coupons</li>
-            <li>🎫 Bookings</li>
-            <li>💰 Revenue</li>
+            <li class="${activeTab === 'bookings' ? 'active' : ''}" id="tab-bookings">🎫 Bookings</li>
+            <li class="${activeTab === 'revenue' ? 'active' : ''}" id="tab-revenue">💰 Revenue</li>
           </ul>
           <button id="admin-back-btn" class="auth-button" style="margin-top: auto;">Back to Home</button>
         </div>
@@ -60,6 +60,8 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
       case 'rooms':     return renderRooms();
       case 'showtimes': return renderShowtimes();
       case 'coupons':   return renderCoupons();
+      case 'bookings':  return renderBookings();
+      case 'revenue':   return renderRevenue();
       default:          return renderDashboard();
     }
   }
@@ -73,7 +75,15 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
     return '';
   }
 
+  function getBookingData() {
+    const data = localStorage.getItem('cine_bookings');
+    return data ? JSON.parse(data) : [];
+  }
+
   function renderDashboard() {
+    const bookings = getBookingData();
+    const totalRevenue = bookings.reduce((sum: number, b: any) => sum + b.totalAmount, 0);
+
     return `
       <header>
         <h1>Overview Statistics</h1>
@@ -84,24 +94,16 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
           <p class="stat-value">${movies.length}</p>
         </div>
         <div class="stat-card">
-          <h3>Total Cinemas</h3>
-          <p class="stat-value">${cinemas.length}</p>
-        </div>
-        <div class="stat-card">
-          <h3>Total Rooms</h3>
-          <p class="stat-value">${rooms.length}</p>
-        </div>
-        <div class="stat-card">
           <h3>Total Showtimes</h3>
           <p class="stat-value">${showtimes.length}</p>
         </div>
-        <div class="stat-card">
-          <h3>Active Coupons</h3>
-          <p class="stat-value">${coupons.filter(c => c.status === 'active').length}</p>
+        <div class="stat-card" style="border-left: 4px solid var(--accent-gold);">
+          <h3>Total Revenue</h3>
+          <p class="stat-value" style="color: var(--accent-gold);">${totalRevenue.toLocaleString('vi-VN')} ₫</p>
         </div>
         <div class="stat-card">
           <h3>Total Bookings</h3>
-          <p class="stat-value">1,248</p>
+          <p class="stat-value">${bookings.length}</p>
         </div>
       </div>
 
@@ -110,33 +112,32 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
         <table class="admin-table">
           <thead>
             <tr>
-              <th>Booking ID</th>
-              <th>User</th>
+              <th>ID</th>
+              <th>Customer</th>
               <th>Movie</th>
-              <th>Date</th>
+              <th>Date/Time</th>
+              <th>Total</th>
               <th>Status</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td>#BK9283</td>
-              <td>johndoe@example.com</td>
-              <td>The Dark Knight</td>
-              <td>2024-05-12</td>
-              <td><span class="badge success">Confirmed</span></td>
-            </tr>
-            <tr>
-              <td>#BK9284</td>
-              <td>sarah@test.com</td>
-              <td>Inception</td>
-              <td>2024-05-12</td>
-              <td><span class="badge pending">Pending</span></td>
-            </tr>
+            ${bookings.slice(0, 5).map((b: any) => `
+              <tr>
+                <td><code style="color:var(--accent-gold)">${b.bookingCode}</code></td>
+                <td>${b.customerName}</td>
+                <td>${b.movieTitle}</td>
+                <td>${b.date} ${b.time}</td>
+                <td>${b.totalAmount.toLocaleString('vi-VN')} ₫</td>
+                <td><span class="badge success">Confirmed</span></td>
+              </tr>
+            `).join('')}
+            ${bookings.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding: 40px; color: var(--text-dim);">No bookings found yet.</td></tr>' : ''}
           </tbody>
         </table>
       </div>
     `;
   }
+
 
   function renderMovies() {
     return `
@@ -577,6 +578,125 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
     `;
   }
 
+  function renderBookings() {
+    const bookings = getBookingData();
+    return `
+      <header>
+        <h1>Booking History</h1>
+      </header>
+      <div class="admin-content-section">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Customer</th>
+              <th>Movie</th>
+              <th>Showtime</th>
+              <th>Seats</th>
+              <th>Total</th>
+              <th>Method</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${bookings.map((b: any) => `
+              <tr>
+                <td><code style="color:var(--accent-gold)">${b.bookingCode}</code></td>
+                <td>${b.customerName}<br/><small style="color:var(--text-dim)">${b.phone}</small></td>
+                <td>${b.movieTitle}</td>
+                <td>${b.date}<br/>${b.time}</td>
+                <td>${b.seats.join(', ')}</td>
+                <td><strong>${b.totalAmount.toLocaleString('vi-VN')} ₫</strong></td>
+                <td>${b.paymentMethod}</td>
+              </tr>
+            `).join('')}
+            ${bookings.length === 0 ? '<tr><td colspan="7" style="text-align:center; padding: 40px;">No bookings found.</td></tr>' : ''}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function renderRevenue() {
+    const bookings = getBookingData();
+    const totalRevenue = bookings.reduce((sum: number, b: any) => sum + b.totalAmount, 0);
+    const totalTickets = bookings.reduce((sum: number, b: any) => sum + b.seats.length, 0);
+    const avgTicket = totalTickets > 0 ? (totalRevenue / totalTickets).toFixed(0) : 0;
+
+    // Stats by Movie
+    const movieStats: Record<string, { rev: number, tks: number }> = {};
+    bookings.forEach((b: any) => {
+      if (!movieStats[b.movieTitle]) movieStats[b.movieTitle] = { rev: 0, tks: 0 };
+      movieStats[b.movieTitle].rev += b.totalAmount;
+      movieStats[b.movieTitle].tks += b.seats.length;
+    });
+
+    // Revenue by Day (Simple)
+    const dayStats: Record<string, number> = {};
+    bookings.forEach((b: any) => {
+      dayStats[b.date] = (dayStats[b.date] || 0) + b.totalAmount;
+    });
+    const sortedDays = Object.entries(dayStats).sort().slice(-7);
+    const maxDayRev = Math.max(...Object.values(dayStats), 1);
+
+    return `
+      <header>
+        <h1>Revenue Analysis</h1>
+      </header>
+      <div class="stats-grid">
+        <div class="stat-card gold">
+          <h3>Total Revenue</h3>
+          <p class="stat-value">${totalRevenue.toLocaleString('vi-VN')} ₫</p>
+        </div>
+        <div class="stat-card">
+          <h3>Tickets Sold</h3>
+          <p class="stat-value">${totalTickets}</p>
+        </div>
+        <div class="stat-card">
+          <h3>Avg. per Ticket</h3>
+          <p class="stat-value">${Number(avgTicket).toLocaleString('vi-VN')} ₫</p>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 30px; margin-top: 30px;">
+        <div class="admin-content-section">
+          <h3>Revenue by Movie</h3>
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Movie Title</th>
+                <th style="text-align:right">Tickets</th>
+                <th style="text-align:right">Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${Object.entries(movieStats).sort((a,b) => b[1].rev - a[1].rev).map(([title, s]) => `
+                <tr>
+                  <td>${title}</td>
+                  <td style="text-align:right">${s.tks}</td>
+                  <td style="text-align:right"><strong>${s.rev.toLocaleString('vi-VN')} ₫</strong></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="admin-content-section" style="min-height: 280px">
+          <h3>Daily Revenue (Last 7 Days)</h3>
+          <div class="chart-container" style="height: 200px; display: flex; align-items: flex-end; gap: 10px; padding-top: 20px; border-bottom: 1px solid rgba(255,255,255,0.1)">
+            ${sortedDays.map(([date, rev]) => `
+              <div class="chart-bar-wrap" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; height: 100%">
+                <div class="chart-bar" style="width: 100%; background: var(--accent-gold); border-radius: 4px 4px 0 0; height: ${(rev/maxDayRev)*100}%; position: relative;" title="${rev.toLocaleString()} ₫">
+                </div>
+                <span class="chart-label-rotated" style="font-size: 10px; opacity: 0.5; transform: rotate(-45deg); white-space: nowrap">${date.split('/').slice(0,2).join('/')}</span>
+              </div>
+            `).join('')}
+            ${sortedDays.length === 0 ? '<p style="color:var(--text-dim); text-align:center; width:100%">No data yet</p>' : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   function setupEventListeners() {
     document.getElementById('admin-back-btn')?.addEventListener('click', onBack);
     
@@ -607,6 +727,16 @@ export function renderAdminDashboard(container: HTMLElement, onBack: () => void)
 
     document.getElementById('tab-coupons')?.addEventListener('click', () => {
       activeTab = 'coupons';
+      render();
+    });
+
+    document.getElementById('tab-bookings')?.addEventListener('click', () => {
+      activeTab = 'bookings';
+      render();
+    });
+
+    document.getElementById('tab-revenue')?.addEventListener('click', () => {
+      activeTab = 'revenue';
       render();
     });
 
