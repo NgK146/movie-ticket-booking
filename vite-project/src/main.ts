@@ -504,6 +504,114 @@ function renderFeaturedMovie(movie: Movie): string {
   `
 }
 
+function renderMembershipSection(): string {
+  const user = Auth.getCurrentUser();
+  const tiers = [
+    {
+      id: 'Member',
+      name: 'Member',
+      icon: '🎫',
+      req: 'Mặc định khi đăng ký',
+      benefits: ['Tích lũy 5% điểm thưởng', 'Nhận tin khuyến mãi sớm nhất', 'Đổi điểm lấy bắp nước']
+    },
+    {
+      id: 'Silver',
+      name: 'Silver VIP',
+      icon: '🥈',
+      req: 'Chi tiêu từ 1.000.000 ₫',
+      benefits: ['Tích lũy 7% điểm thưởng', 'Giảm 10% giá vé vào thứ 4', 'Quà tặng sinh nhật bất ngờ']
+    },
+    {
+      id: 'Gold',
+      name: 'Gold VVIP',
+      icon: '🥇',
+      req: 'Chi tiêu từ 5.000.000 ₫',
+      benefits: ['Tích lũy 10% điểm thưởng', 'Phòng chờ thương gia miễn phí', 'Ưu tiên chọn chỗ ngồi đẹp']
+    }
+  ];
+
+  const thresholds = { Silver: 1000000, Gold: 5000000 };
+  let nextTier: string | null = null;
+  let progress = 100;
+  let remaining = 0;
+
+  if (user) {
+    if (user.tier === 'Member') {
+      nextTier = 'Silver';
+      progress = Math.min(100, (user.totalSpent / thresholds.Silver) * 100);
+      remaining = thresholds.Silver - user.totalSpent;
+    } else if (user.tier === 'Silver') {
+      nextTier = 'Gold';
+      progress = Math.min(100, (user.totalSpent / thresholds.Gold) * 100);
+      remaining = thresholds.Gold - user.totalSpent;
+    }
+  }
+
+  return `
+    <section class="section members-section" id="members" aria-label="Chương trình thành viên">
+      <div class="section-inner">
+        <div class="section-header">
+          <div class="section-title-group">
+            <div class="section-label">
+              <div class="label-bar" style="background: linear-gradient(135deg, #ecc94b, #d69e2e)"></div>
+              <span style="color: #ecc94b">Đặc Quyền</span>
+            </div>
+            <h2 class="section-title">Hạng Thẻ Thành Viên</h2>
+            <p class="section-subtitle">Tận hưởng những ưu đãi độc quyền chỉ dành cho hội viên CineBooking</p>
+          </div>
+        </div>
+
+        <div class="tier-grid">
+          ${tiers.map(t => `
+            <div class="tier-p-card ${t.id.toLowerCase()} ${user?.tier === t.id ? 'active' : ''}">
+              ${user?.tier === t.id ? '<div class="current-rank-badge">Hạng của bạn</div>' : ''}
+              <div class="tier-icon-wrap">${t.icon}</div>
+              <h3 class="tier-p-title">${t.name}</h3>
+              <p class="tier-p-req">${t.req}</p>
+              <ul class="tier-benefits">
+                ${t.benefits.map(b => `
+                  <li class="tier-benefit-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    ${b}
+                  </li>
+                `).join('')}
+              </ul>
+            </div>
+          `).join('')}
+        </div>
+
+        ${user ? `
+          <div class="user-progress-panel">
+            <div class="up-info">
+              <h3 class="up-title">Xin chào, ${user.name}!</h3>
+              <p class="up-sub">
+                ${nextTier 
+                  ? `Bạn đang ở hạng <b>${user.tier}</b>. Còn <b>${remaining.toLocaleString('vi-VN')} ₫</b> để lên <b>${nextTier}</b>.`
+                  : `Chúc mừng! Bạn đã đạt hạng cao nhất <b>${user.tier}</b>.`}
+              </p>
+            </div>
+            <div class="up-progress-box">
+              <div class="progress-info" style="justify-content: space-between; display: flex; margin-bottom: 8px; font-size: 13px; font-weight: 700;">
+                <span>Tiến trình thăng hạng</span>
+                <span>${Math.round(progress)}%</span>
+              </div>
+              <div class="progress-track" style="height: 10px; background: rgba(255,255,255,0.05); border-radius: 5px;">
+                <div class="progress-fill" style="width: ${progress}%; height: 100%; background: linear-gradient(90deg, #ff3d5a, #ff6b35); border-radius: 5px;"></div>
+              </div>
+            </div>
+          </div>
+        ` : `
+          <div class="user-progress-panel" style="justify-content: center;">
+            <p style="color: #94a3b8;">Hãy <a href="#auth" onclick="handleAuthRoute(); return false;" style="color: #ff3d5a; font-weight: 700;">Đăng nhập</a> để xem tiến trình thăng hạng của bạn.</p>
+          </div>
+        `}
+      </div>
+    </section>
+  `
+}
+
 // =========================================
 // MAIN APP HTML
 // =========================================
@@ -748,7 +856,9 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         ${comingSoonMovies.map(m => renderComingSoonCard(m)).join('')}
       </div>
     </div>
-  </section>
+  ${renderMembershipSection()}
+
+  <div class="section-sep"></div>
 
   <!-- ==========================================
        FOOTER
@@ -1177,6 +1287,39 @@ function refreshSeatMap() {
 }
 
 let seatSimulationInterval: number | null = null
+let bookingTimerInterval: number | null = null
+
+function startBookingTimer(durationSeconds: number) {
+  stopBookingTimer()
+  let timer = durationSeconds
+  const timerEl = document.getElementById('sm-timer')
+  
+  bookingTimerInterval = window.setInterval(() => {
+    const minutes = Math.floor(timer / 60)
+    const seconds = timer % 60
+    const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+    
+    if (timerEl) {
+      timerEl.innerHTML = `<span>⏳</span> Thời gian còn lại: <b>${timeStr}</b>`
+      if (timer <= 60) {
+        timerEl.classList.add('warning')
+      }
+    }
+
+    if (--timer < 0) {
+      stopBookingTimer()
+      closeSeatModal()
+      showToast('⏰ Hết thời gian giữ ghế. Vui lòng thực hiện lại!', 'error')
+    }
+  }, 1000)
+}
+
+function stopBookingTimer() {
+  if (bookingTimerInterval) {
+    clearInterval(bookingTimerInterval)
+    bookingTimerInterval = null
+  }
+}
 
 function startSeatSimulation() {
   if (seatSimulationInterval) return
@@ -1277,6 +1420,9 @@ function renderSeatModal(movie: Movie): string {
               <span>🎬 ${movie.language}</span>
               <span>📍 CGV Vincom</span>
             </div>
+          </div>
+          <div class="sm-timer" id="sm-timer">
+            <span>⏳</span> Thời gian còn lại: <b>05:00</b>
           </div>
           <button class="sm-close" id="sm-close-btn" aria-label="Đóng">✕</button>
         </div>
@@ -1475,6 +1621,9 @@ function renderSeatModal(movie: Movie): string {
               </div>
               <div class="coupon-feedback" id="coupon-feedback" style="display:none"></div>
 
+              <!-- Points Redemption -->
+              <div id="points-redemption-section" style="margin-top: 18px;"></div>
+
               <!-- Final total -->
               <div class="ck-total-box">
                 <div class="ck-total-row">
@@ -1497,6 +1646,27 @@ function renderSeatModal(movie: Movie): string {
 
             </div>
 
+          </div>
+
+          <!-- Processing State -->
+          <div class="sm-processing" id="sm-processing">
+            <div class="proc-spinner"></div>
+            <h3 class="proc-title">Đang xử lý giao dịch</h3>
+            <p class="proc-msg">Hệ thống đang kết nối an toàn tới cổng thanh toán...</p>
+            <div class="proc-steps">
+               <div class="proc-step active" id="p-step-1">
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                 Khởi tạo phiên thanh toán
+               </div>
+               <div class="proc-step" id="p-step-2">
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+                 Xác thực với ngân hàng
+               </div>
+               <div class="proc-step" id="p-step-3">
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+                 Xuất mã vé điện tử
+               </div>
+            </div>
           </div>
 
           <!-- Footer actions -->
@@ -1567,6 +1737,7 @@ function openSeatModal(movieId: number) {
 
   attachModalListeners(movie)
   startSeatSimulation()
+  startBookingTimer(300) // 5 minutes
 }
 
 function closeSeatModal() {
@@ -1574,6 +1745,7 @@ function closeSeatModal() {
   if (!backdrop) return
   backdrop.classList.remove('active')
   stopSeatSimulation()
+  stopBookingTimer()
   setTimeout(() => backdrop.remove(), 350)
 }
 
@@ -1821,6 +1993,8 @@ function populateCheckout() {
   if (comboTotEl) comboTotEl.textContent = comboTotal > 0 ? comboTotal.toLocaleString('vi-VN') + ' ₫' : '0 ₫'
   if (grandTotEl) grandTotEl.textContent = (seatState.totalSeat + comboTotal).toLocaleString('vi-VN') + ' ₫'
 
+  renderPointsRedemption();
+
   // AUTO-FILL USER INFO
   const user = Auth.getCurrentUser()
   if (user) {
@@ -1831,6 +2005,37 @@ function populateCheckout() {
     if (phoneInput && !phoneInput.value) phoneInput.value = user.phone
     if (emailInput && !emailInput.value) emailInput.value = user.email
   }
+}
+
+function renderPointsRedemption() {
+  const container = document.getElementById('points-redemption-section');
+  if (!container) return;
+
+  const user = Auth.getCurrentUser();
+  if (!user || user.points <= 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  // 1 point = 1,000 VND
+  const pointValue = user.points * 1000;
+
+  container.innerHTML = `
+    <div class="points-redeem-box">
+      <div class="pr-info">
+        <span class="pr-title">Sử dụng điểm thưởng</span>
+        <span class="pr-sub">Bạn có <b>${user.points} điểm</b> (≈ ${pointValue.toLocaleString('vi-VN')} ₫)</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="use-points-toggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+  `;
+
+  document.getElementById('use-points-toggle')?.addEventListener('change', () => {
+    updateCheckoutTotals();
+  });
 }
 
 function calcComboTotal(): number {
@@ -1896,10 +2101,17 @@ function applyDiscount() {
 }
 
 function updateCheckoutTotals() {
+  const user          = Auth.getCurrentUser();
   const comboTotal    = calcComboTotal()
   const subtotal      = seatState.totalSeat + comboTotal
   const discountOff   = calcDiscount(subtotal)
-  const grand         = Math.max(0, subtotal - discountOff)
+  
+  // Points calculation
+  const pointsToggle  = document.getElementById('use-points-toggle') as HTMLInputElement;
+  const pointsUsed    = (pointsToggle?.checked && user) ? user.points : 0;
+  const pointsValue   = pointsUsed * 1000;
+
+  const grand         = Math.max(0, subtotal - discountOff - pointsValue)
 
   const comboEl    = document.getElementById('ck-combo-total')
   const grandEl    = document.getElementById('ck-grand-total')
@@ -1936,89 +2148,109 @@ function processPayment(_movie: Movie) {
     showToast('Số điện thoại không hợp lệ', 'error'); phoneEl?.focus(); return
   }
 
-  const confirmBtn = document.getElementById('sm-btn-confirm') as HTMLButtonElement
+  const selectedPayment = (document.querySelector('input[name="payment"]:checked') as HTMLInputElement)?.value || 'momo'
+  const comboTotal = calcComboTotal()
+  const subtotal = seatState.totalSeat + comboTotal
+  const discountOff = calcDiscount(subtotal)
+  
+  const user = Auth.getCurrentUser();
+  const pointsToggle = document.getElementById('use-points-toggle') as HTMLInputElement;
+  const pointsUsed = (pointsToggle?.checked && user) ? user.points : 0;
+  
+  const finalTotal = Math.max(0, subtotal - discountOff - (pointsUsed * 1000));
+
+  currentTicket = {
+    bookingCode: 'CB' + Math.random().toString(36).substr(2, 6).toUpperCase(),
+    movieTitle: _movie.title,
+    cinema: 'CineBooking Vincom',
+    date: seatState.selectedDate,
+    time: seatState.selectedTime,
+    seats: seatState.selectedSeats,
+    customerName: nameEl.value.trim(),
+    phone: phoneEl.value.trim(),
+    totalAmount: finalTotal,
+    paymentMethod: selectedPayment.toUpperCase(),
+    selectedCombos: { ...seatState.selectedCombos },
+    comboTotal: comboTotal,
+    discountCode: seatState.discountCode,
+    pointsUsed: pointsUsed
+  }
+
+  // Show processing state
+  const mainContent = document.getElementById('sm-main-content')!
+  const processing  = document.getElementById('sm-processing')!
+  const successEl   = document.getElementById('sm-success')!
+  const confirmBtn  = document.getElementById('sm-btn-confirm') as HTMLButtonElement
+  
   confirmBtn.disabled = true
-  confirmBtn.textContent = '⏳ Đang xử lý...'
+  mainContent.style.display = 'none'
+  processing.classList.add('show')
 
-  // Simulate payment processing
+  // Sequence steps animation
+  setTimeout(() => { 
+    const step2 = document.getElementById('p-step-2')
+    if (step2) {
+      step2.classList.add('active');
+      step2.querySelector('circle')?.remove();
+      step2.insertAdjacentHTML('afterbegin', '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>');
+    }
+  }, 700)
+  
+  setTimeout(() => { 
+    const step3 = document.getElementById('p-step-3')
+    if (step3) {
+      step3.classList.add('active');
+      step3.querySelector('circle')?.remove();
+      step3.insertAdjacentHTML('afterbegin', '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>');
+    }
+  }, 1400)
+
+  // Finalize after 2.2s
   setTimeout(() => {
-    const mainContent = document.getElementById('sm-main-content')!
-    const successEl   = document.getElementById('sm-success')!
-    const codeEl      = document.getElementById('sm-booking-code')!
-    const infoEl      = document.getElementById('success-info')
-
-    document.getElementById('step-3')!.className = 'sm-step done'
-
-    const code = 'CB' + Math.random().toString(36).substring(2, 8).toUpperCase()
-    codeEl.textContent = code
-
-    const payLabel: Record<string, string> = {
-      momo: 'MoMo', vnpay: 'VNPay', banking: 'Chuyển khoản', counter: 'Tại quầy'
-    }
-    const subtotal    = seatState.totalSeat + calcComboTotal()
-    const discountOff = calcDiscount(subtotal)
-    const grand       = Math.max(0, subtotal - discountOff)
-
-    // Generate ticket data
-    currentTicket = {
-      bookingCode: code,
-      movieTitle: _movie.title,
-      cinema: 'CGV Vincom Center Bà Triệu', // Placeholder cinema
-      date: seatState.selectedDate,
-      time: seatState.selectedTime,
-      seats: seatState.selectedSeats,
-      customerName: nameEl.value.trim(),
-      totalAmount: grand,
-      paymentMethod: payLabel[seatState.paymentMethod],
-      ...(seatState.discountCode ? { discountCode: seatState.discountCode } : {})
+    saveBooking(currentTicket!)
+    
+    // Update user points and spending
+    if (user) {
+      user.points = (user.points || 0) - pointsUsed + Math.floor(finalTotal / 10000);
+      user.totalSpent = (user.totalSpent || 0) + finalTotal;
+      
+      // Update tier logic
+      if (user.totalSpent >= 5000000) user.tier = 'Gold';
+      else if (user.totalSpent >= 1000000) user.tier = 'Silver';
+      
+      Auth.setCurrentUser(user);
+      refreshNavbar();
     }
 
-    // Render QR Code to the canvas
-    const canvas = document.getElementById('sm-qr-canvas') as HTMLCanvasElement
-    if (canvas) {
-      renderQRToCanvas(canvas, currentTicket).catch(err => {
-        console.error('QR rendering failed:', err)
-      })
-    }
-
+    // Display ticket success
+    const codeEl = document.getElementById('sm-booking-code')!
+    const infoEl = document.getElementById('success-info')
+    
+    codeEl.textContent = currentTicket!.bookingCode
     if (infoEl) {
-      const discountRow = discountOff > 0
-        ? `<div class="sd-row"><span>Giảm giá (${seatState.discountCode})</span><b style="color:#10b981">− ${discountOff.toLocaleString('vi-VN')} ₫</b></div>`
-        : ''
       infoEl.innerHTML = `
         <div class="success-detail-grid">
-          <div class="sd-row"><span>Khách hàng</span><b>${nameEl.value.trim()}</b></div>
-          <div class="sd-row"><span>Ghế</span><b>${seatState.selectedSeats.join(', ')}</b></div>
-          <div class="sd-row"><span>Lịch chiếu</span><b>${seatState.selectedTime} – ${seatState.selectedDate}</b></div>
-          <div class="sd-row"><span>Thanh toán</span><b>${payLabel[seatState.paymentMethod]}</b></div>
-          ${discountRow}
-          <div class="sd-row total"><span>Tổng</span><b>${grand.toLocaleString('vi-VN')} ₫</b></div>
+          <div class="sd-row"><span>Khách hàng</span><b>${currentTicket!.customerName}</b></div>
+          <div class="sd-row"><span>Mã đặt vé</span><b style="color: #ff3d5a;">${currentTicket!.bookingCode}</b></div>
+          <div class="sd-row"><span>Lịch chiếu</span><b>${currentTicket!.time} – ${currentTicket!.date}</b></div>
+          <div class="sd-row"><span>Ghế</span><b>${currentTicket!.seats.join(', ')}</b></div>
+          <div class="sd-row"><span>Thanh toán</span><b>${currentTicket!.paymentMethod}</b></div>
+          ${pointsUsed > 0 ? `<div class="sd-row"><span>Điểm đã dùng</span><b style="color: #10b981;">-${(pointsUsed * 1000).toLocaleString('vi-VN')} ₫</b></div>` : ''}
+          <div class="sd-row total"><span>Tổng thanh toán</span><b>${currentTicket!.totalAmount.toLocaleString('vi-VN')} ₫</b></div>
         </div>
       `
     }
 
-    mainContent.style.display = 'none'
-    successEl.classList.add('show')
-    showToast('🎟️ Đặt vé thành công!', 'success')
+    const canvas = document.getElementById('sm-qr-canvas') as HTMLCanvasElement
+    if (canvas) renderQRToCanvas(canvas, currentTicket!)
 
-    // Save to history
-    if (currentTicket) {
-      saveBooking(currentTicket)
-      
-      // PERSIST SEATS FOR REAL-TIME
-      saveOccupiedSeats(seatState.movieId, seatState.selectedDate, seatState.selectedTime, seatState.selectedSeats)
-      
-      // UPDATE MEMBERSHIP IF LOGGED IN
-      const user = Auth.getCurrentUser()
-      if (user) {
-        Auth.updateMembership(grand)
-        refreshNavbar()
-      }
-    }
-  }, 1200)
+    processing.classList.remove('show')
+    successEl.classList.add('show')
+    showToast('🎉 Chúc mừng! Bạn đã đặt vé thành công.', 'success')
+    stopBookingTimer();
+  }, 2200)
 }
 
-// ---- Patch handleBooking to open the seat modal ----
 // ---- Admin Dashboard Integration ----
 function openAdminDashboard() {
   const app = document.getElementById('app')!
@@ -2091,6 +2323,12 @@ function renderHistoryModal(): string {
                 <span>💰 Tổng tiền:</span>
                 <b class="hi-price">${b.totalAmount.toLocaleString('vi-VN')} ₫</b>
               </div>
+              ${b.comboTotal && b.comboTotal > 0 ? `
+                <div class="hi-row" style="font-size: 11px; opacity: 0.8; margin-top: -4px;">
+                  <span>🍿 Bao gồm:</span>
+                  <span>${Object.entries(b.selectedCombos || {}).filter(([_,q]) => q > 0).map(([id, q]) => `${q}x ${id === 'c1' ? 'Bắp đơn' : id === 'c2' ? 'Combo đôi' : 'Hotdog'}`).join(', ')}</span>
+                </div>
+              ` : ''}
             </div>
             <div class="hi-footer">
               <button class="hi-btn-view" onclick="viewTicketFromHistory(${index})">
@@ -2203,64 +2441,191 @@ window.viewTicketFromHistory = (index: number) => {
   }, 100)
 }
 
-// =========================================
-// PROFILE MODAL
-// =========================================
 function openProfileModal() {
   const user = Auth.getCurrentUser()
   if (!user) return
 
-  const modalHTML = `
-    <div class="seat-modal-backdrop active" id="profile-modal-backdrop">
-      <div class="auth-card profile-card" style="max-width: 500px; margin: 40px auto; position: relative;">
-        <button class="sm-close" id="profile-close-btn" style="position: absolute; right: 20px; top: 20px;">✕</button>
-        
-        <div class="profile-header" style="text-align: center; margin-bottom: 25px;">
-          <div class="profile-avatar-lg" style="width: 100px; height: 100px; border-radius: 50%; overflow: hidden; margin: 0 auto 15px; border: 3px solid var(--accent-gold);">
-            <img src="${user.avatar || 'https://i.pravatar.cc/150'}" style="width: 100%; height: 100%; object-fit: cover;">
-          </div>
-          <h2 style="margin: 0; color: var(--text-h);">${user.name}</h2>
-          <span class="badge" style="background: ${Auth.getTierBadgeColor(user.tier)}; color: white; padding: 4px 12px; border-radius: 20px; font-size: 11px; text-transform: uppercase; font-weight: 700; margin-top: 8px; display: inline-block;">${user.tier} Member</span>
-        </div>
+  let isEditing = false
 
-        <div class="profile-stats-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
-          <div class="stat-card" style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
-            <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase;">Điểm tích luỹ</div>
-            <div style="font-size: 24px; color: var(--accent-gold); font-weight: 700;">${user.points}</div>
+  function renderModalContent() {
+    // Tier Progress Calculation
+    const thresholds = { Silver: 1000000, Gold: 5000000 }
+    let nextTier: string | null = null
+    let progress = 100
+    let remaining = 0
+
+    if (user!.tier === 'Member') {
+      nextTier = 'Silver'
+      progress = Math.min(100, (user!.totalSpent / thresholds.Silver) * 100)
+      remaining = thresholds.Silver - user!.totalSpent
+    } else if (user!.tier === 'Silver') {
+      nextTier = 'Gold'
+      progress = Math.min(100, (user!.totalSpent / thresholds.Gold) * 100)
+      remaining = thresholds.Gold - user!.totalSpent
+    }
+
+    return `
+      <div class="modal-backdrop active" id="profile-modal-backdrop">
+        <div class="modal-content profile-modal">
+          <div class="sm-header">
+            <div class="sm-title-box">
+              <h2 class="sm-title">Tài Khoản & Thành Viên</h2>
+              <p class="sm-subtitle">Quản lý thông tin và theo dõi ưu đãi của bạn</p>
+            </div>
+            <button class="sm-close-btn" id="profile-close-btn">×</button>
           </div>
-          <div class="stat-card" style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
-            <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase;">Đã chi tiêu</div>
-            <div style="font-size: 18px; color: var(--text-h); font-weight: 700;">${user.totalSpent.toLocaleString('vi-VN')} ₫</div>
+
+          <div class="profile-content">
+            <!-- Membership Card -->
+            <div class="membership-card tier-${user?.tier}">
+              <div class="membership-header">
+                <div class="tier-name">${user?.tier} Member</div>
+                <div class="points-display">
+                  <span class="points-label">Điểm tích lũy</span>
+                  <span class="points-val">${user?.points}</span>
+                </div>
+              </div>
+              
+              <div class="membership-footer">
+                ${nextTier ? `
+                  <div class="progress-info">
+                    <span>Tiến trình lên ${nextTier}</span>
+                    <span>${Math.round(progress)}%</span>
+                  </div>
+                  <div class="progress-track">
+                    <div class="progress-fill" style="width: ${progress}%"></div>
+                  </div>
+                  <p style="font-size: 10px; margin-top: 8px; opacity: 0.8;">
+                    Bạn cần chi tiêu thêm <b>${remaining.toLocaleString('vi-VN')} ₫</b> để đạt hạng ${nextTier}
+                  </p>
+                ` : `
+                  <div class="progress-info">
+                    <span>Hạng cao nhất: ${user?.tier}</span>
+                    <span>100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill" style="width: 100%"></div></div>
+                  <p style="font-size: 10px; margin-top: 8px; opacity: 0.8;">Bạn đang tận hưởng ưu đãi cao nhất của CineBooking!</p>
+                `}
+              </div>
+            </div>
+
+            <!-- Profile Form -->
+            <div class="profile-section">
+              <div class="section-h">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Thông tin cá nhân
+              </div>
+
+              ${isEditing ? `
+                <div class="profile-row">
+                  <label class="profile-label">Họ và tên</label>
+                  <input type="text" id="edit-name" class="profile-input" value="${user?.name}">
+                </div>
+                <div class="profile-row">
+                  <label class="profile-label">Số điện thoại</label>
+                  <input type="tel" id="edit-phone" class="profile-input" value="${user?.phone}">
+                </div>
+              ` : `
+                <div class="profile-row">
+                  <span class="profile-label">Họ và tên</span>
+                  <span class="profile-val">${user?.name}</span>
+                </div>
+                <div class="profile-row">
+                  <span class="profile-label">Số điện thoại</span>
+                  <span class="profile-val">${user?.phone}</span>
+                </div>
+              `}
+              <div class="profile-row">
+                <span class="profile-label">Email đăng ký</span>
+                <span class="profile-val" style="opacity: 0.6;">${user?.email}</span>
+              </div>
+            </div>
+
+            <!-- Profile Actions -->
+            <div class="profile-actions">
+              ${isEditing ? `
+                <button class="btn-profile btn-profile-save" id="profile-save-btn">Lưu thay đổi</button>
+                <button class="btn-profile btn-profile-edit" id="profile-cancel-btn">Hủy</button>
+              ` : `
+                <button class="btn-profile btn-profile-edit" id="profile-edit-btn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  Chỉnh sửa
+                </button>
+                <button class="btn-profile btn-logout" id="profile-logout-btn">Đăng xuất</button>
+              `}
+            </div>
           </div>
         </div>
-
-        <div class="profile-info-list" style="margin-bottom: 25px; background: rgba(255,255,255,0.03); padding: 5px 15px; border-radius: 12px;">
-          <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-            <span style="color: var(--text-dim); font-size: 14px;">Email</span>
-            <span style="color: var(--text-h); font-size: 14px;">${user.email}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; padding: 12px 0;">
-            <span style="color: var(--text-dim); font-size: 14px;">Số điện thoại</span>
-            <span style="color: var(--text-h); font-size: 14px;">${user.phone}</span>
-          </div>
-        </div>
-
-        <button id="profile-logout-btn" class="auth-button" style="background: #e53e3e; margin-top: 10px;">Đăng Xuất</button>
       </div>
-    </div>
-  `
-  document.body.insertAdjacentHTML('beforeend', modalHTML)
+    `
+  }
 
-  document.getElementById('profile-close-btn')?.addEventListener('click', () => {
-    document.getElementById('profile-modal-backdrop')?.remove()
-  })
-  
-  document.getElementById('profile-logout-btn')?.addEventListener('click', () => {
-    Auth.logout()
-    document.getElementById('profile-modal-backdrop')?.remove()
-    refreshNavbar()
-    showToast('👋 Đã đăng xuất thành công', 'info')
-  })
+  function updateModalDOM() {
+    const existing = document.getElementById('profile-modal-backdrop')
+    if (existing) existing.remove()
+    document.body.insertAdjacentHTML('beforeend', renderModalContent())
+    attachListeners()
+    
+    // Animation trigger
+    requestAnimationFrame(() => {
+      document.getElementById('profile-modal-backdrop')?.classList.add('active')
+    })
+  }
+
+  function attachListeners() {
+    const backdrop = document.getElementById('profile-modal-backdrop')!
+    
+    document.getElementById('profile-close-btn')?.addEventListener('click', () => {
+      backdrop.classList.remove('active')
+      setTimeout(() => backdrop.remove(), 350)
+    })
+
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) {
+        backdrop.classList.remove('active')
+        setTimeout(() => backdrop.remove(), 350)
+      }
+    })
+
+    document.getElementById('profile-edit-btn')?.addEventListener('click', () => {
+      isEditing = true
+      updateModalDOM()
+    })
+
+    document.getElementById('profile-cancel-btn')?.addEventListener('click', () => {
+      isEditing = false
+      updateModalDOM()
+    })
+
+    document.getElementById('profile-save-btn')?.addEventListener('click', () => {
+      const newName = (document.getElementById('edit-name') as HTMLInputElement).value
+      const newPhone = (document.getElementById('edit-phone') as HTMLInputElement).value
+
+      if (!newName || !newPhone) {
+        showToast('Vui lòng nhập đầy đủ thông tin', 'error')
+        return
+      }
+
+      // Update User Data
+      user!.name = newName
+      user!.phone = newPhone
+      Auth.setCurrentUser(user!)
+      
+      showToast('Cập nhật hồ sơ thành công!', 'success')
+      isEditing = false
+      updateModalDOM()
+      refreshNavbar()
+    })
+    
+    document.getElementById('profile-logout-btn')?.addEventListener('click', () => {
+      Auth.logout()
+      backdrop.remove()
+      refreshNavbar()
+      showToast('Đã đăng xuất thành công', 'info')
+    })
+  }
+
+  updateModalDOM()
 }
 
 function refreshNavbar() {
@@ -2298,6 +2663,15 @@ function refreshNavbar() {
     </button>
   `
   attachNavbarListeners()
+
+  // Also re-render members section if on page
+  const membersSection = document.getElementById('members')
+  if (membersSection) {
+    const parent = membersSection.parentElement
+    if (parent) {
+      membersSection.outerHTML = renderMembershipSection()
+    }
+  }
 }
 
 function handleAuthRoute() {
