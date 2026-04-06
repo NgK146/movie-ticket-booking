@@ -504,6 +504,114 @@ function renderFeaturedMovie(movie: Movie): string {
   `
 }
 
+function renderMembershipSection(): string {
+  const user = Auth.getCurrentUser();
+  const tiers = [
+    {
+      id: 'Member',
+      name: 'Member',
+      icon: '🎫',
+      req: 'Mặc định khi đăng ký',
+      benefits: ['Tích lũy 5% điểm thưởng', 'Nhận tin khuyến mãi sớm nhất', 'Đổi điểm lấy bắp nước']
+    },
+    {
+      id: 'Silver',
+      name: 'Silver VIP',
+      icon: '🥈',
+      req: 'Chi tiêu từ 1.000.000 ₫',
+      benefits: ['Tích lũy 7% điểm thưởng', 'Giảm 10% giá vé vào thứ 4', 'Quà tặng sinh nhật bất ngờ']
+    },
+    {
+      id: 'Gold',
+      name: 'Gold VVIP',
+      icon: '🥇',
+      req: 'Chi tiêu từ 5.000.000 ₫',
+      benefits: ['Tích lũy 10% điểm thưởng', 'Phòng chờ thương gia miễn phí', 'Ưu tiên chọn chỗ ngồi đẹp']
+    }
+  ];
+
+  const thresholds = { Silver: 1000000, Gold: 5000000 };
+  let nextTier: string | null = null;
+  let progress = 100;
+  let remaining = 0;
+
+  if (user) {
+    if (user.tier === 'Member') {
+      nextTier = 'Silver';
+      progress = Math.min(100, (user.totalSpent / thresholds.Silver) * 100);
+      remaining = thresholds.Silver - user.totalSpent;
+    } else if (user.tier === 'Silver') {
+      nextTier = 'Gold';
+      progress = Math.min(100, (user.totalSpent / thresholds.Gold) * 100);
+      remaining = thresholds.Gold - user.totalSpent;
+    }
+  }
+
+  return `
+    <section class="section members-section" id="members" aria-label="Chương trình thành viên">
+      <div class="section-inner">
+        <div class="section-header">
+          <div class="section-title-group">
+            <div class="section-label">
+              <div class="label-bar" style="background: linear-gradient(135deg, #ecc94b, #d69e2e)"></div>
+              <span style="color: #ecc94b">Đặc Quyền</span>
+            </div>
+            <h2 class="section-title">Hạng Thẻ Thành Viên</h2>
+            <p class="section-subtitle">Tận hưởng những ưu đãi độc quyền chỉ dành cho hội viên CineBooking</p>
+          </div>
+        </div>
+
+        <div class="tier-grid">
+          ${tiers.map(t => `
+            <div class="tier-p-card ${t.id.toLowerCase()} ${user?.tier === t.id ? 'active' : ''}">
+              ${user?.tier === t.id ? '<div class="current-rank-badge">Hạng của bạn</div>' : ''}
+              <div class="tier-icon-wrap">${t.icon}</div>
+              <h3 class="tier-p-title">${t.name}</h3>
+              <p class="tier-p-req">${t.req}</p>
+              <ul class="tier-benefits">
+                ${t.benefits.map(b => `
+                  <li class="tier-benefit-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    ${b}
+                  </li>
+                `).join('')}
+              </ul>
+            </div>
+          `).join('')}
+        </div>
+
+        ${user ? `
+          <div class="user-progress-panel">
+            <div class="up-info">
+              <h3 class="up-title">Xin chào, ${user.name}!</h3>
+              <p class="up-sub">
+                ${nextTier 
+                  ? `Bạn đang ở hạng <b>${user.tier}</b>. Còn <b>${remaining.toLocaleString('vi-VN')} ₫</b> để lên <b>${nextTier}</b>.`
+                  : `Chúc mừng! Bạn đã đạt hạng cao nhất <b>${user.tier}</b>.`}
+              </p>
+            </div>
+            <div class="up-progress-box">
+              <div class="progress-info" style="justify-content: space-between; display: flex; margin-bottom: 8px; font-size: 13px; font-weight: 700;">
+                <span>Tiến trình thăng hạng</span>
+                <span>${Math.round(progress)}%</span>
+              </div>
+              <div class="progress-track" style="height: 10px; background: rgba(255,255,255,0.05); border-radius: 5px;">
+                <div class="progress-fill" style="width: ${progress}%; height: 100%; background: linear-gradient(90deg, #ff3d5a, #ff6b35); border-radius: 5px;"></div>
+              </div>
+            </div>
+          </div>
+        ` : `
+          <div class="user-progress-panel" style="justify-content: center;">
+            <p style="color: #94a3b8;">Hãy <a href="#auth" onclick="handleAuthRoute(); return false;" style="color: #ff3d5a; font-weight: 700;">Đăng nhập</a> để xem tiến trình thăng hạng của bạn.</p>
+          </div>
+        `}
+      </div>
+    </section>
+  `
+}
+
 // =========================================
 // MAIN APP HTML
 // =========================================
@@ -748,7 +856,9 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         ${comingSoonMovies.map(m => renderComingSoonCard(m)).join('')}
       </div>
     </div>
-  </section>
+  ${renderMembershipSection()}
+
+  <div class="section-sep"></div>
 
   <!-- ==========================================
        FOOTER
@@ -2479,6 +2589,15 @@ function refreshNavbar() {
     </button>
   `
   attachNavbarListeners()
+
+  // Also re-render members section if on page
+  const membersSection = document.getElementById('members')
+  if (membersSection) {
+    const parent = membersSection.parentElement
+    if (parent) {
+      membersSection.outerHTML = renderMembershipSection()
+    }
+  }
 }
 
 function handleAuthRoute() {
