@@ -2257,64 +2257,191 @@ window.viewTicketFromHistory = (index: number) => {
   }, 100)
 }
 
-// =========================================
-// PROFILE MODAL
-// =========================================
 function openProfileModal() {
   const user = Auth.getCurrentUser()
   if (!user) return
 
-  const modalHTML = `
-    <div class="seat-modal-backdrop active" id="profile-modal-backdrop">
-      <div class="auth-card profile-card" style="max-width: 500px; margin: 40px auto; position: relative;">
-        <button class="sm-close" id="profile-close-btn" style="position: absolute; right: 20px; top: 20px;">✕</button>
-        
-        <div class="profile-header" style="text-align: center; margin-bottom: 25px;">
-          <div class="profile-avatar-lg" style="width: 100px; height: 100px; border-radius: 50%; overflow: hidden; margin: 0 auto 15px; border: 3px solid var(--accent-gold);">
-            <img src="${user.avatar || 'https://i.pravatar.cc/150'}" style="width: 100%; height: 100%; object-fit: cover;">
-          </div>
-          <h2 style="margin: 0; color: var(--text-h);">${user.name}</h2>
-          <span class="badge" style="background: ${Auth.getTierBadgeColor(user.tier)}; color: white; padding: 4px 12px; border-radius: 20px; font-size: 11px; text-transform: uppercase; font-weight: 700; margin-top: 8px; display: inline-block;">${user.tier} Member</span>
-        </div>
+  let isEditing = false
 
-        <div class="profile-stats-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
-          <div class="stat-card" style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
-            <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase;">Điểm tích luỹ</div>
-            <div style="font-size: 24px; color: var(--accent-gold); font-weight: 700;">${user.points}</div>
+  function renderModalContent() {
+    // Tier Progress Calculation
+    const thresholds = { Silver: 1000000, Gold: 5000000 }
+    let nextTier: string | null = null
+    let progress = 100
+    let remaining = 0
+
+    if (user!.tier === 'Member') {
+      nextTier = 'Silver'
+      progress = Math.min(100, (user!.totalSpent / thresholds.Silver) * 100)
+      remaining = thresholds.Silver - user!.totalSpent
+    } else if (user!.tier === 'Silver') {
+      nextTier = 'Gold'
+      progress = Math.min(100, (user!.totalSpent / thresholds.Gold) * 100)
+      remaining = thresholds.Gold - user!.totalSpent
+    }
+
+    return `
+      <div class="modal-backdrop active" id="profile-modal-backdrop">
+        <div class="modal-content profile-modal">
+          <div class="sm-header">
+            <div class="sm-title-box">
+              <h2 class="sm-title">Tài Khoản & Thành Viên</h2>
+              <p class="sm-subtitle">Quản lý thông tin và theo dõi ưu đãi của bạn</p>
+            </div>
+            <button class="sm-close-btn" id="profile-close-btn">×</button>
           </div>
-          <div class="stat-card" style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
-            <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase;">Đã chi tiêu</div>
-            <div style="font-size: 18px; color: var(--text-h); font-weight: 700;">${user.totalSpent.toLocaleString('vi-VN')} ₫</div>
+
+          <div class="profile-content">
+            <!-- Membership Card -->
+            <div class="membership-card tier-${user?.tier}">
+              <div class="membership-header">
+                <div class="tier-name">${user?.tier} Member</div>
+                <div class="points-display">
+                  <span class="points-label">Điểm tích lũy</span>
+                  <span class="points-val">${user?.points}</span>
+                </div>
+              </div>
+              
+              <div class="membership-footer">
+                ${nextTier ? `
+                  <div class="progress-info">
+                    <span>Tiến trình lên ${nextTier}</span>
+                    <span>${Math.round(progress)}%</span>
+                  </div>
+                  <div class="progress-track">
+                    <div class="progress-fill" style="width: ${progress}%"></div>
+                  </div>
+                  <p style="font-size: 10px; margin-top: 8px; opacity: 0.8;">
+                    Bạn cần chi tiêu thêm <b>${remaining.toLocaleString('vi-VN')} ₫</b> để đạt hạng ${nextTier}
+                  </p>
+                ` : `
+                  <div class="progress-info">
+                    <span>Hạng cao nhất: ${user?.tier}</span>
+                    <span>100%</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill" style="width: 100%"></div></div>
+                  <p style="font-size: 10px; margin-top: 8px; opacity: 0.8;">Bạn đang tận hưởng ưu đãi cao nhất của CineBooking!</p>
+                `}
+              </div>
+            </div>
+
+            <!-- Profile Form -->
+            <div class="profile-section">
+              <div class="section-h">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Thông tin cá nhân
+              </div>
+
+              ${isEditing ? `
+                <div class="profile-row">
+                  <label class="profile-label">Họ và tên</label>
+                  <input type="text" id="edit-name" class="profile-input" value="${user?.name}">
+                </div>
+                <div class="profile-row">
+                  <label class="profile-label">Số điện thoại</label>
+                  <input type="tel" id="edit-phone" class="profile-input" value="${user?.phone}">
+                </div>
+              ` : `
+                <div class="profile-row">
+                  <span class="profile-label">Họ và tên</span>
+                  <span class="profile-val">${user?.name}</span>
+                </div>
+                <div class="profile-row">
+                  <span class="profile-label">Số điện thoại</span>
+                  <span class="profile-val">${user?.phone}</span>
+                </div>
+              `}
+              <div class="profile-row">
+                <span class="profile-label">Email đăng ký</span>
+                <span class="profile-val" style="opacity: 0.6;">${user?.email}</span>
+              </div>
+            </div>
+
+            <!-- Profile Actions -->
+            <div class="profile-actions">
+              ${isEditing ? `
+                <button class="btn-profile btn-profile-save" id="profile-save-btn">Lưu thay đổi</button>
+                <button class="btn-profile btn-profile-edit" id="profile-cancel-btn">Hủy</button>
+              ` : `
+                <button class="btn-profile btn-profile-edit" id="profile-edit-btn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  Chỉnh sửa
+                </button>
+                <button class="btn-profile btn-logout" id="profile-logout-btn">Đăng xuất</button>
+              `}
+            </div>
           </div>
         </div>
-
-        <div class="profile-info-list" style="margin-bottom: 25px; background: rgba(255,255,255,0.03); padding: 5px 15px; border-radius: 12px;">
-          <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-            <span style="color: var(--text-dim); font-size: 14px;">Email</span>
-            <span style="color: var(--text-h); font-size: 14px;">${user.email}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; padding: 12px 0;">
-            <span style="color: var(--text-dim); font-size: 14px;">Số điện thoại</span>
-            <span style="color: var(--text-h); font-size: 14px;">${user.phone}</span>
-          </div>
-        </div>
-
-        <button id="profile-logout-btn" class="auth-button" style="background: #e53e3e; margin-top: 10px;">Đăng Xuất</button>
       </div>
-    </div>
-  `
-  document.body.insertAdjacentHTML('beforeend', modalHTML)
+    `
+  }
 
-  document.getElementById('profile-close-btn')?.addEventListener('click', () => {
-    document.getElementById('profile-modal-backdrop')?.remove()
-  })
-  
-  document.getElementById('profile-logout-btn')?.addEventListener('click', () => {
-    Auth.logout()
-    document.getElementById('profile-modal-backdrop')?.remove()
-    refreshNavbar()
-    showToast('👋 Đã đăng xuất thành công', 'info')
-  })
+  function updateModalDOM() {
+    const existing = document.getElementById('profile-modal-backdrop')
+    if (existing) existing.remove()
+    document.body.insertAdjacentHTML('beforeend', renderModalContent())
+    attachListeners()
+    
+    // Animation trigger
+    requestAnimationFrame(() => {
+      document.getElementById('profile-modal-backdrop')?.classList.add('active')
+    })
+  }
+
+  function attachListeners() {
+    const backdrop = document.getElementById('profile-modal-backdrop')!
+    
+    document.getElementById('profile-close-btn')?.addEventListener('click', () => {
+      backdrop.classList.remove('active')
+      setTimeout(() => backdrop.remove(), 350)
+    })
+
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) {
+        backdrop.classList.remove('active')
+        setTimeout(() => backdrop.remove(), 350)
+      }
+    })
+
+    document.getElementById('profile-edit-btn')?.addEventListener('click', () => {
+      isEditing = true
+      updateModalDOM()
+    })
+
+    document.getElementById('profile-cancel-btn')?.addEventListener('click', () => {
+      isEditing = false
+      updateModalDOM()
+    })
+
+    document.getElementById('profile-save-btn')?.addEventListener('click', () => {
+      const newName = (document.getElementById('edit-name') as HTMLInputElement).value
+      const newPhone = (document.getElementById('edit-phone') as HTMLInputElement).value
+
+      if (!newName || !newPhone) {
+        showToast('Vui lòng nhập đầy đủ thông tin', 'error')
+        return
+      }
+
+      // Update User Data
+      user!.name = newName
+      user!.phone = newPhone
+      Auth.setCurrentUser(user!)
+      
+      showToast('Cập nhật hồ sơ thành công!', 'success')
+      isEditing = false
+      updateModalDOM()
+      refreshNavbar()
+    })
+    
+    document.getElementById('profile-logout-btn')?.addEventListener('click', () => {
+      Auth.logout()
+      backdrop.remove()
+      refreshNavbar()
+      showToast('Đã đăng xuất thành công', 'info')
+    })
+  }
+
+  updateModalDOM()
 }
 
 function refreshNavbar() {
