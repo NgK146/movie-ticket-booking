@@ -1997,29 +1997,37 @@ function processPayment(_movie: Movie) {
     const discountOff = calcDiscount(subtotal)
     const grand       = Math.max(0, subtotal - discountOff)
 
+    const comboTotal  = calcComboTotal()
+    
     // Generate ticket data
     currentTicket = {
       bookingCode: code,
       movieTitle: _movie.title,
-      cinema: 'CGV Vincom Center Bà Triệu', // Placeholder cinema
+      cinema: 'CGV Vincom Center Bà Triệu', 
       date: seatState.selectedDate,
       time: seatState.selectedTime,
       seats: seatState.selectedSeats,
       customerName: nameEl.value.trim(),
+      phone: phoneEl.value.trim(),
       totalAmount: grand,
       paymentMethod: payLabel[seatState.paymentMethod],
+      selectedCombos: { ...seatState.selectedCombos },
+      comboTotal: comboTotal,
       ...(seatState.discountCode ? { discountCode: seatState.discountCode } : {})
     }
 
     // Render QR Code to the canvas
     const canvas = document.getElementById('sm-qr-canvas') as HTMLCanvasElement
-    if (canvas) {
+    if (canvas && currentTicket) {
       renderQRToCanvas(canvas, currentTicket).catch(err => {
         console.error('QR rendering failed:', err)
       })
     }
 
     if (infoEl) {
+      const comboRow = comboTotal > 0
+        ? `<div class="sd-row"><span>Đồ ăn & Uống</span><b>${comboTotal.toLocaleString('vi-VN')} ₫</b></div>`
+        : ''
       const discountRow = discountOff > 0
         ? `<div class="sd-row"><span>Giảm giá (${seatState.discountCode})</span><b style="color:#10b981">− ${discountOff.toLocaleString('vi-VN')} ₫</b></div>`
         : ''
@@ -2028,9 +2036,10 @@ function processPayment(_movie: Movie) {
           <div class="sd-row"><span>Khách hàng</span><b>${nameEl.value.trim()}</b></div>
           <div class="sd-row"><span>Ghế</span><b>${seatState.selectedSeats.join(', ')}</b></div>
           <div class="sd-row"><span>Lịch chiếu</span><b>${seatState.selectedTime} – ${seatState.selectedDate}</b></div>
+          ${comboRow}
           <div class="sd-row"><span>Thanh toán</span><b>${payLabel[seatState.paymentMethod]}</b></div>
           ${discountRow}
-          <div class="sd-row total"><span>Tổng</span><b>${grand.toLocaleString('vi-VN')} ₫</b></div>
+          <div class="sd-row total"><span>Tổng cộng</span><b>${grand.toLocaleString('vi-VN')} ₫</b></div>
         </div>
       `
     }
@@ -2130,6 +2139,12 @@ function renderHistoryModal(): string {
                 <span>💰 Tổng tiền:</span>
                 <b class="hi-price">${b.totalAmount.toLocaleString('vi-VN')} ₫</b>
               </div>
+              ${b.comboTotal && b.comboTotal > 0 ? `
+                <div class="hi-row" style="font-size: 11px; opacity: 0.8; margin-top: -4px;">
+                  <span>🍿 Bao gồm:</span>
+                  <span>${Object.entries(b.selectedCombos || {}).filter(([_,q]) => q > 0).map(([id, q]) => `${q}x ${id === 'c1' ? 'Bắp đơn' : id === 'c2' ? 'Combo đôi' : 'Hotdog'}`).join(', ')}</span>
+                </div>
+              ` : ''}
             </div>
             <div class="hi-footer">
               <button class="hi-btn-view" onclick="viewTicketFromHistory(${index})">
